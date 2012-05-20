@@ -1,0 +1,345 @@
+<!--
+/*!
+ * Javascript ARMv7 Emulator
+ *
+ * Copyright 2012, Ryota Ozaki
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ */
+-->
+<html>
+<head>
+<script src="jquery-1.7.1.min.js"></script>
+<script src="jquery-ui-1.8.18.custom.min.js"></script>
+<script src="symbols.js"></script>
+<script src="display.js"></script>
+<script src="logger.js"></script>
+<script src="tracer.js"></script>
+<script src="utils.js"></script>
+<script src="bitops.js"></script>
+<script src="number64.js"></script>
+<script src="JSONlocalStorage.js"></script>
+<script src="option.js"></script>
+<script src="parameter.js"></script>
+<script src="term.js"></script>
+<script src="filesystem.js"></script>
+<script src="cpu-armv7.js"></script>
+<script src="vexpress.js"></script>
+<style>
+.term {
+    font-family: courier,fixed,swiss,monospace,sans-serif;
+    font-size: 14px;
+    color: #f0f0f0;
+    background: #000000;
+}
+
+.termReverse {
+    color: #000000;
+    background: #00ff00;
+}
+#note {
+    font-size: 12px;
+}
+#copyright {
+    font-size: 10px;
+}
+#clipboard {
+    font-size: 12px;
+}
+#display {
+    font-size: 12px;
+    height: 60%;
+    overflow: scroll;
+}
+</style>
+<link href="jquery-ui-1.8.18.custom.css" rel="stylesheet" type="text/css" />
+<style>
+.ui-widget-content {
+    font-size: normal;
+}
+.tab {
+    font-size: 12px;
+}
+.ui-widget button, .ui-widget label {
+    font-size: 12px;
+}
+</style>
+</head>
+
+<body>
+<script>
+options = new Options();
+parameters = new Parameters();
+configurations = new Configurations();
+
+bitops = new BitOps();
+
+display = new Display("display", options);
+logger = new Logger(display, options);
+tracer = new Tracer(display, options);
+btracer = new BranchTracer(display, options);
+
+$(document).ready(function() {
+    configurations.read_saved_values(display);
+    configurations.register_handlers();
+
+    system = new VersatileExpress(configurations, options);
+    function term_handler(str) {
+        //system.uart.send_chars(str);
+        system.keyboard.receive_char(str);
+        system.uart0.input_char(str);
+    }
+    term = new Term(80, 20, term_handler);
+    system.uart0.write_to_terminal = term.write.bind(term);
+    system.uart1.write_to_terminal = term.write.bind(term);
+    //system.uart1.write_to_terminal = function() {return;}; // Dummy
+
+    function system_state_changed_cb(system) {
+        if (system.is_booted) {
+            $("#stack").removeAttr("disabled");
+            $("#show_page_tables").removeAttr("disabled");
+            $("#dump_phymem").removeAttr("disabled");
+            $("#dump_virmem").removeAttr("disabled");
+            if (system.is_running) {
+                $("#save").attr("disabled", "disabled")
+                $("#restore").attr("disabled", "disabled")
+                $("#step").attr("disabled", "disabled")
+            } else {
+                $("#save").removeAttr("disabled");
+                $("#restore").removeAttr("disabled");
+                $("#step").removeAttr("disabled");
+            }
+        } else {
+            $("#save").attr("disabled", "disabled");
+            $("#step").attr("disabled", "disabled");
+            $("#stack").attr("disabled", "disabled");
+            $("#show_page_tables").attr("disabled", "disabled");
+            $("#dump_phymem").attr("disabled", "disabled");
+            $("#dump_virmem").attr("disabled", "disabled");
+        }
+
+        if (!system.is_booted)
+            $("#controller").html("Boot");
+        else if (!system.is_running)
+            $("#controller").html("Restart");
+        else
+            $("#controller").html("Stop");
+    }
+    system.set_state_changed_cb(system_state_changed_cb);
+
+    $("#controller").click(function() {
+        if (!system.is_booted) {
+            system.boot(parameters);
+        } else {
+            if (system.is_running)
+                system.stop();
+            else
+                system.restart();
+        }
+    });
+    $("#step").click(function() {
+        system.stop_after = 1;
+        system.restart();
+    });
+    $("#save").click(function() {
+        system.save();
+    });
+    $("#restore").click(function() {
+        system.restore();
+        logger.reset();
+        tracer.reset();
+        btracer.reset();
+        $("#controller").html("Restart");
+    });
+    $("#show_logs").click(function() {
+        display.wipe();
+        logger.dump();
+    });
+    $("#show_traces").click(function() {
+        display.wipe();
+        tracer.dump();
+    });
+    $("#show_branch_traces").click(function() {
+        display.wipe();
+        btracer.dump();
+    });
+    $("#dump").click(function() {
+        system.dump();
+    });
+    $("#stack").click(function() {
+        system.dump_stack();
+    });
+    $("#show_options").click(function() {
+        display.wipe();
+        options.dump(display);
+    });
+    $("#show_page_tables").click(function() {
+        system.dump_page_tables();
+    });
+    $("#test").click(function() {
+        bitops.test();
+        TestNumber64();
+    });
+    $("#test_terminal").click(function() {
+        system.test_terminal();
+    });
+    $("#save_options").click(function() {
+        options.save_to_localStorage();
+    });
+    $("#save_parameters").click(function() {
+        parameters.save_to_localStorage();
+        configurations.save_to_localStorage();
+    });
+    $("#dump_phymem").click(function() {
+        system.dump_phymem(parseInt($('#phymem_addr').val(), 16));
+    });
+    $("#dump_virmem").click(function() {
+        system.dump_virmem(parseInt($('#virmem_addr').val(), 16));
+    });
+
+    $("#dump_io").click(function() {
+        system.dump_io();
+    });
+
+    term.open();
+    options.read_saved_values(display);
+    options.register_handlers();
+    parameters.read_saved_values(display);
+    parameters.register_handlers();
+    term.set_handlers();
+
+    prev = 0.0;
+    function update_instruction_display() {
+        var display = document.getElementById('inst_counter');
+        display.innerHTML = system.n_instructions.toString();
+        if (prev != 0.0) {
+            display = document.getElementById('kips');
+            var kips = (system.n_instructions - prev) / 1000;
+            display.innerHTML = kips.toFixed(1);
+        }
+        prev = system.n_instructions;
+    }
+
+    setInterval(update_instruction_display, 1000);
+});
+</script>
+<script>
+$(function() {
+    $('#ui-tabs').tabs();
+});
+</script>
+<div id=header>
+  <button id="controller" type="button">Boot</button>
+  <button id="step" type="button" disabled>Execute one instruction</button>
+  /
+  <button id="save" type="button" disabled>Save system</button>
+  <button id="restore" type="button">Restore system</button>
+</div>
+<div><span id="kips">0.0</span> KIPS / <span id="inst_counter">0</span> instructions executed</div>
+<div id="ui-tabs">
+  <ul>
+    <li class="tab"><a href="#tab-1">Emulator Terminal</a></li>
+    <li class="tab"><a href="#tab-2">Emulator Parameters</a></li>
+    <li class="tab"><a href="#tab-3">Debug Console</a></li>
+    <li class="tab"><a href="#tab-4">Debug Options</a></li>
+  </ul>
+  <div id="tab-1">
+    <input id=input>
+    <table id=terminal border="0" cellspacing="0" cellpadding="0">
+    </table>
+  </div>
+  <div id="tab-2">
+    <fieldset id="configuration">
+      <legend><label>Machine Configuration</label></legend>
+      <ul style="list-style-type: none;">
+        <li><label>Memory Size: <input type=number id=memory_size min=20> MB</label></li>
+      </ul>
+    </fieldset>
+    <fieldset id="boot_parameters">
+      <legend><label>Boot Parameters</label></legend>
+      <ul style="list-style-type: none;">
+        <li><label>Kernel zImage: <input type=text id=zImage_url size=60></label></li>
+        <li><label>Kernel cmdline: <input type=text id=cmdline size=60></label></li>
+        <li><label>Initrd: <input type=text id=initrd_url size=60></label></li>
+        <li><label>Initrd compressed size: <input type=number id=initrd_size min=0> Byte</label></li>
+        <li><label>Initrd cpio size: <input type=number id=initrd_decomp_size min=0> Byte</label></li>
+      </ul>
+    </fieldset>
+    <button id="save_parameters" type="button">Save</button>
+  </div>
+  <div id="tab-3">
+    <button id="show_logs" class="button" type="button">Show logs</button>
+    <button id="show_traces" class="button" type="button">Show traces</button>
+    <button id="show_branch_traces" class="button" type="button">Show branch traces</button>
+    <button id="dump" class="button" type="button">Show states</button>
+    <button id="show_options" class="button" type="button">Show options</button>
+    <button id="test" class="button" type="button">Test</button>
+    <button id="test_terminal" class="button" type="button">Test terminal</button>
+    <br />
+    <button id="stack" class="button" type="button" disabled>Show stack</button>
+    <button id="show_page_tables" class="button" type="button" disabled>Show page tables</button>
+    <label>PhyAddr: <input type=text id=phymem_addr placeholder="c0001234" pattern="^(0x)?[0-9a-fA-F]+$"></label>
+    <button id="dump_phymem" class="button" type="button" disabled>Dump phymem</button>
+    <label>VirAddr: <input type=text id=virmem_addr placeholder="c0001234" pattern="^(0x)?[0-9a-fA-F]+$"></label>
+    <button id="dump_virmem" class="button" type="button" disabled>Dump virmem</button>
+    <button id="dump_io" class="button" type="button">Dump I/O regions</button>
+    <br />
+    <label><input type=checkbox id=update_current_function>Current function: <input type=text id=function></label>
+    <label>Show activities at: <input type=text id=show_act_on_viraddr placeholder="c0001234" pattern="^(0x)?[0-9a-fA-F]+$"></label>
+    <label>(Symbol <input type=text id=show_act_on_symbol pattern="^[a-zA-Z_][\w_]+$"></label>)</li>
+    <pre id="display"></pre>
+  </div>
+  <div id="tab-4" style="width: 50%">
+    <fieldset id="option_stopper">
+      <legend>
+        <label><input type=checkbox id=enable_stopper>Stop at</label>
+      </legend>
+      <ul style="list-style-type: none;">
+        <li><label>Tick: <input type=number id=stop_counter min=0></label></li>
+        <li><label>Instruction: <input type=text id=stop_instruction placeholder="e320f000" pattern="^(0x)?[0-9a-fA-F]+$"></label></li>
+        <li><label>Address: <input type=text id=stop_address placeholder="c0001234" pattern="^(0x)?[0-9a-fA-F]+$"></label>
+            <label>(Function <input type=text id=stop_address_name pattern="^[a-zA-Z_][\w_]+$"></label>)</li>
+        <li><label><input type=checkbox id=stop_at_every_branch>Every branch</label></li>
+        <li><label><input type=checkbox id=stop_at_every_funccall>Every function call</label></li>
+      </ul>
+    </fieldset>
+    <fieldset id="option_logger">
+      <legend>
+        <label><input type=checkbox id=enable_logger>Logger</label>
+      </legend>
+      <ul style="list-style-type: none;">
+        <li><label>Log size: <input type=number id=log_size min=0 max=10000 step=1000></label></li>
+        <li><label><input type=checkbox id=logger_buffering>Buffering outputs</label></li>
+      </ul>
+    </fieldset>
+    <fieldset id="option_tracer">
+      <legend>
+        <label><input type=checkbox id=enable_tracer>Tracer</label>
+      </legend>
+      <ul style="list-style-type: none;">
+        <li><label>Trace size: <input type=number id=trace_size min=0 max=10000 step=1000></label></li>
+        <li><label>Trace check size: <input type=number id=trace_check_size min=0 max=1000 step=5></label></li>
+        <li><label><input type=checkbox id=tracer_buffering>Buffering outputs</label></li>
+      </ul>
+    </fieldset>
+    <fieldset id="option_branch_tracer">
+      <legend>
+        <label><input type=checkbox id=enable_branch_tracer>Branch tracer</label>
+      </legend>
+      <ul style="list-style-type: none;">
+        <li><label>Trace size: <input type=number id=branch_trace_size min=0 max=10000 step=1000></label></li>
+        <li><label><input type=checkbox id=branch_tracer_buffering>Buffering outputs</label></li>
+      </ul>
+    </fieldset>
+    <fieldset id="option_others">
+      <legend>
+        <label>Others</label>
+      </legend>
+      <ul style="list-style-type: none;">
+        <li><label><input type=checkbox id=suppress_interrupts>Suppress interrupts</label></li>
+      </ul>
+    </fieldset>
+    <button id="save_options" type="button">Save</button>
+  </div>
+</div>
+</body>
+</html>
