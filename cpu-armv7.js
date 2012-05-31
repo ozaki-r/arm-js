@@ -28,6 +28,15 @@ function CPU_ARMv7(options, system, memctlr) {
     this.mode2string[this.UND_MODE] = "UND";
     this.mode2string[this.SYS_MODE] = "SYS";
 
+    this.is_good_mode = new Object();
+    this.is_good_mode[this.USR_MODE] = true;
+    this.is_good_mode[this.FIQ_MODE] = true;
+    this.is_good_mode[this.IRQ_MODE] = true;
+    this.is_good_mode[this.SVC_MODE] = true;
+    this.is_good_mode[this.ABT_MODE] = true;
+    this.is_good_mode[this.UND_MODE] = true;
+    this.is_good_mode[this.SYS_MODE] = true;
+
     this.regs = new Array();
     for (i = 0; i < 16; i++)
         this.regs[i] = 0;
@@ -99,7 +108,7 @@ function CPU_ARMv7(options, system, memctlr) {
     this.coprocs = new Array();
     for (i = 0; i < 16; i++)
         this.coprocs[i] = null;
-    this.coprocs[15] = new CPU_ARM_CP15(this);
+    this.coprocs[15] = new CPU_ARM_CP15(options, this);
     this.mmu.cp15 = this.coprocs[15];
 
     this.shift_t = 0;
@@ -113,7 +122,7 @@ function CPU_ARMv7(options, system, memctlr) {
     this.SRType_RRX = 3;
     this.SRType_ROR = 4;
 
-    this.no_cond_insts = new Array();
+    this.no_cond_insts = new Object();
     this.no_cond_insts["cps"] = true;
     this.no_cond_insts["clrex"] = true;
     this.no_cond_insts["dsb"] = true;
@@ -202,19 +211,6 @@ CPU_ARMv7.prototype.dump_stack = function() {
         var val = this.ld_word(addr);
         display.log("\t" + toStringHex32(addr) + ":\t" + toStringHex32(val) + "(" + val.toString(10) + ")");
     }
-    /*
-    try {
-        var addr = sp;
-        do {
-            var val = this.ld_word(addr);
-            if (val === undefined || val === null)
-                break;
-            display.log("\t" + toStringHex32(addr) + ":\t" + toStringHex32(val) + "(" + val.toString(10) + ")");
-            addr -= 4;
-        } while (addr <= 0xffffffff || addr > 0);
-    } catch (e) {
-    }
-    */
 };
 
 CPU_ARMv7.prototype.get_pc = function() {
@@ -274,6 +270,8 @@ CPU_ARMv7.prototype.output_banked_regs = function(target) {
 };
 
 CPU_ARMv7.prototype.log_cpsr = function() {
+    if (!this.options.enable_logger)
+        return;
     this.output_cpsr(logger);
 };
 
@@ -286,6 +284,8 @@ CPU_ARMv7.prototype.dump_spsr = function() {
 };
 
 CPU_ARMv7.prototype.log_apsr = function() {
+    if (!this.options.enable_logger)
+        return;
     this.output_apsr(logger);
 };
 
@@ -341,7 +341,6 @@ CPU_ARMv7.prototype.dump_regs = function(oldregs) {
 };
 
 CPU_ARMv7.prototype.output_regs = function(target, oldregs) {
-    //return;
     var i;
     var indent = "     ";
     var msg = indent;
@@ -387,6 +386,9 @@ CPU_ARMv7.prototype.dump_value = function(value, name) {
 };
 
 CPU_ARMv7.prototype.log_value = function(value, name) {
+    if (!this.options.enable_logger)
+        return;
+
     this.output_value(logger, value, name);
 };
 
@@ -399,11 +401,11 @@ CPU_ARMv7.prototype.output_value = function(target, value, name) {
 
 CPU_ARMv7.prototype.is_bad_mode = function(mode) {
     switch (mode) {
-        case this.USR_MODE:
-        case this.FIQ_MODE:
-        case this.IRQ_MODE:
         case this.SVC_MODE:
+        case this.IRQ_MODE:
+        case this.USR_MODE:
         case this.ABT_MODE:
+        case this.FIQ_MODE:
         case this.UND_MODE:
         case this.SYS_MODE:
             return false;
@@ -415,9 +417,6 @@ CPU_ARMv7.prototype.is_bad_mode = function(mode) {
 
 CPU_ARMv7.prototype.is_priviledged = function() {
     var mode = this.cpsr.m;
-    //this.log_value(this.cpsr, "cpsr");
-    if (this.is_bad_mode(mode))
-        this.abort_unpredictable("is_priviledged", mode);
     if (mode == this.USR_MODE)
         return false;
     else
@@ -426,8 +425,6 @@ CPU_ARMv7.prototype.is_priviledged = function() {
 
 CPU_ARMv7.prototype.is_user_or_system = function() {
     var mode = this.cpsr.m;
-    if (this.is_bad_mode(mode))
-        this.abort_unpredictable("is_user_or_system", mode);
     if (mode == this.USR_MODE || mode == this.SYS_MODE)
         return true;
     else
@@ -456,33 +453,32 @@ CPU_ARMv7.prototype.sctlr_get_nmfi = function() {
 
 CPU_ARMv7.prototype.parse_psr = function(value) {
     var psr = {n:0, z:0, c:0, v:0, q:0, e:0, a:0, i:0, f:0, t:0, m:0};
-    psr.n = bitops.get_bit(value, 31);
-    psr.z = bitops.get_bit(value, 30);
-    psr.c = bitops.get_bit(value, 29);
-    psr.v = bitops.get_bit(value, 28);
-    psr.q = bitops.get_bit(value, 27);
-    psr.e = bitops.get_bit(value, 9);
-    psr.a = bitops.get_bit(value, 8);
-    psr.i = bitops.get_bit(value, 7);
-    psr.f = bitops.get_bit(value, 6);
-    psr.t = bitops.get_bit(value, 5);
-    psr.m = bitops.get_bits(value, 4, 0);
+    psr.n = value >>> 31;
+    psr.z = (value >>> 30) & 1;
+    psr.c = (value >>> 29) & 1;
+    psr.v = (value >>> 28) & 1;
+    psr.q = (value >>> 27) & 1;
+    psr.e = (value >>> 9) & 1;
+    psr.a = (value >>> 8) & 1;
+    psr.i = (value >>> 7) & 1;
+    psr.f = (value >>> 6) & 1;
+    psr.t = (value >>> 5) & 1;
+    psr.m = value & 0x1f;
     return psr;
 };
 
 CPU_ARMv7.prototype.psr_to_value = function(psr) {
-    var value = 0;
-    value = bitops.set_bit(value, 31, psr.n);
-    value = bitops.set_bit(value, 30, psr.z);
-    value = bitops.set_bit(value, 29, psr.c);
-    value = bitops.set_bit(value, 28, psr.v);
-    value = bitops.set_bit(value, 27, psr.q);
-    value = bitops.set_bit(value, 9, psr.e);
-    value = bitops.set_bit(value, 8, psr.a);
-    value = bitops.set_bit(value, 7, psr.i);
-    value = bitops.set_bit(value, 6, psr.f);
-    value = bitops.set_bit(value, 5, psr.t);
-    value = bitops.set_bits(value, 4, 0, psr.m);
+    var value = psr.m;
+    value += psr.t << 5;
+    value += psr.f << 6;
+    value += psr.i << 7;
+    value += psr.a << 8;
+    value += psr.e << 9;
+    value += psr.q << 27;
+    value += psr.v << 28;
+    value += psr.c << 29;
+    value += psr.z << 30;
+    value += psr.n << 31;
     return value;
 };
 
@@ -564,25 +560,25 @@ CPU_ARMv7.prototype.get_current_spsr = function() {
 CPU_ARMv7.prototype.spsr_write_by_instr0 = function(spsr, psr, bytemask) {
     if (this.is_user_or_system())
         this.abort_unpredictable("spsr_write_by_instr0");
-    if (bitops.get_bit(bytemask, 3)) {
+    if (bytemask & 8) {
         spsr.n = psr.n;
         spsr.z = psr.z;
         spsr.c = psr.c;
         spsr.v = psr.v;
         spsr.q = psr.q;
     }
-    if (bitops.get_bit(bytemask, 2)) {
+    if (bytemask & 4) {
         spsr.ge = psr.ge;
     }
-    if (bitops.get_bit(bytemask, 1)) {
+    if (bytemask & 2) {
         spsr.e = psr.e;
         spsr.a = psr.a;
     }
-    if (bitops.get_bit(bytemask, 0)) {
+    if (bytemask & 1) {
         spsr.i = psr.i;
         spsr.f = psr.f;
         spsr.t = psr.t;
-        if (this.is_bad_mode(psr.m))
+        if (!this.is_good_mode[psr.m])
             this.abort_unpredictable("spsr_write_by_instr0", psr.m);
         else
             spsr.m = psr.m;
@@ -599,12 +595,11 @@ CPU_ARMv7.prototype.spsr_write_by_instr = function(psr, bytemask) {
 CPU_ARMv7.prototype.cpsr_write_by_instr = function(psr, bytemask, affect_execstate) {
     var is_priviledged = this.is_priviledged();
     var nmfi = this.sctlr_get_nmfi() == 1;
-    var oldregs = new Array();
-    this.store_regs(oldregs);
-
-    this.log_cpsr();
-    //this.log_value(bytemask, "bytemask");
-    //this.log_value(affect_execstate, "affect_execstate");
+    if (this.options.enable_logger) {
+        var oldregs = new Array();
+        this.store_regs(oldregs);
+        this.log_cpsr();
+    }
 
     if (bytemask & 8) {
         this.cpsr.n = psr.n;
@@ -612,18 +607,8 @@ CPU_ARMv7.prototype.cpsr_write_by_instr = function(psr, bytemask, affect_execsta
         this.cpsr.c = psr.c;
         this.cpsr.v = psr.v;
         this.cpsr.q = psr.q;
-        //if (affect_execstate)
-        //    this.cpsr = bitops.copy_bits(this.cpsr, 26, 24, value);
     }
-    /*
-    // Greater than or Equal flags, for SIMD instructions.
-    if (bytemask & 4) {
-        //this.cpsr = bitops.copy_bits(this.cpsr, 19, 16, value);
-    }
-    */
     if (bytemask & 2) {
-        //if (affect_execstate)
-        //    this.cpsr = bitops.copy_bits(this.cpsr, 15, 10, value);
         this.cpsr.e = psr.e;
         if (is_priviledged && (this.is_secure() || this.scr_get_aw() == 1))
             this.cpsr.a = psr.a;
@@ -637,7 +622,7 @@ CPU_ARMv7.prototype.cpsr_write_by_instr = function(psr, bytemask, affect_execsta
         if (affect_execstate)
             this.cpsr.t = psr.t;
         if (is_priviledged) {
-            if (this.is_bad_mode(psr.m))
+            if (!this.is_good_mode[psr.m])
                 this.abort_unpredictable("cpsr_write_by_instr", psr.m);
             else {
                 if (!this.is_secure() && psr.m == this.MON_MODE)
@@ -649,15 +634,15 @@ CPU_ARMv7.prototype.cpsr_write_by_instr = function(psr, bytemask, affect_execsta
             }
         }
     }
-    //this.dump_cpsr();
-    this.log_cpsr();
-    this.log_regs(oldregs);
+    if (this.options.enable_logger) {
+        this.log_cpsr();
+        this.log_regs(oldregs);
+    }
 };
 
 CPU_ARMv7.prototype.save_to_regs = function(mode) {
     switch (mode) {
         case this.USR_MODE:
-            //throw "save_to_regs user";
             this.regs_usr[13] = this.regs[13];
             this.regs_usr[14] = this.regs[14];
             break;
@@ -702,7 +687,6 @@ CPU_ARMv7.prototype.save_to_regs = function(mode) {
 CPU_ARMv7.prototype.restore_from_regs = function(mode) {
     switch (mode) {
         case this.USR_MODE:
-            //throw "restore_from_regs user";
             this.regs[13] = this.regs_usr[13];
             this.regs[14] = this.regs_usr[14];
             break;
@@ -745,29 +729,23 @@ CPU_ARMv7.prototype.restore_from_regs = function(mode) {
 };
 
 CPU_ARMv7.prototype.change_mode = function(mode) {
-    if (mode == this.USR_MODE) {
-        this.options.enable_logger = true;
-        this.options.enable_tracer = true;
-    } else {
-        this.options.enable_logger = false;
-        this.options.enable_tracer = false;
-    }
     if (!mode)
         throw "Invalid mode: " + mode;
-    logger.log("changing mode from " + this.mode2string[this.cpsr.m] + " to " + this.mode2string[mode]);
-    //display.log("changing mode from " + this.mode2string[this.cpsr.m] + " to " + this.mode2string[mode]);
+    if (this.options.enable_logger)
+        logger.log("changing mode from " + this.mode2string[this.cpsr.m] + " to " + this.mode2string[mode]);
     this.save_to_regs(this.cpsr.m);
     this.cpsr.m = mode;
     this.restore_from_regs(this.cpsr.m);
 };
 
 CPU_ARMv7.prototype.set_apsr = function(val, set_overflow) {
-    this.cpsr.n = bitops.get_bit(val, 31);
-    this.cpsr.z = this.is_zero_bit(val);
+    this.cpsr.n = val >>> 31;
+    this.cpsr.z = (val === 0) ? 1 : 0;
     this.cpsr.c = this.carry_out;
     if (set_overflow)
         this.cpsr.v = this.overflow;
-    this.log_apsr();
+    if (this.options.enable_logger)
+        this.log_apsr();
 };
 
 CPU_ARMv7.prototype.store_regs = function(regs) {
@@ -1117,18 +1095,26 @@ CPU_ARMv7.prototype.print_inst_branch = function(addr, inst, name, branch_to, re
 };
 
 CPU_ARMv7.prototype.sp_used = function(name, inst) {
+    if (!this.options.enable_logger)
+        return;
     logger.log("SP: " + name + ": " + toStringInst(inst));
 };
 
 CPU_ARMv7.prototype.push_used = function(name, list) {
+    if (!this.options.enable_logger)
+        return;
     logger.log("PUSH: " + name + ": " + toStringBin16(list));
 };
 
 CPU_ARMv7.prototype.pop_used = function(name, list) {
+    if (!this.options.enable_logger)
+        return;
     logger.log("POP: " + name + ": " + toStringBin16(list));
 };
 
 CPU_ARMv7.prototype.print_pc = function(newpc, oldpc) {
+    if (!this.options.enable_logger)
+        return;
     if (oldpc)
         logger.log("PC: " + newpc.toString(16) + " from " + oldpc.toString(16) + "(" + (newpc-oldpc).toString(16) + ")");
     else
@@ -1150,7 +1136,6 @@ CPU_ARMv7.prototype.toStringSymbol = function(addr) {
  * Load/Store operations
  */
 CPU_ARMv7.prototype.allow_unaligned_access = function() {
-    //if (!this.mmu.check_unaligned && this.allow_unaligned[this.current])
     if (!this.mmu.check_unaligned)
         return true;
     else
@@ -1162,14 +1147,16 @@ CPU_ARMv7.prototype.ld_word = function(addr) {
         display.log("@" + this.regs[15].toString(16) + ": " + this.toStringSymbol(addr) + ": read");
 
     var phyaddr;
-    if (bitops.get_bits(addr, 1, 0)) {
+    if (addr & 3) {
         if (!this.allow_unaligned_access()) {
             throw "Unaligned ld_word: " + this.current + "@" + toStringHex32(addr);
         } else {
             var val = 0;
+            var mmu = this.mmu;
+            var memctlr = this.memctlr;
             for (var i=0; i < 4; i++) {
-                phyaddr = this.mmu.trans_to_phyaddr(addr + i);
-                val = bitops.set_bits(val, 8*i+7, 8*i, this.memctlr.ld_byte(phyaddr));
+                phyaddr = mmu.trans_to_phyaddr(addr + i);
+                val = bitops.set_bits(val, 8*i+7, 8*i, memctlr.ld_byte(phyaddr));
             }
             return val;
         }
@@ -1184,13 +1171,15 @@ CPU_ARMv7.prototype.st_word = function(addr, word) {
         display.log("@" + this.regs[15].toString(16) + ": " + this.toStringSymbol(addr) + ": write " + toStringNum(word));
 
     var phyaddr;
-    if (bitops.get_bits(addr, 1, 0)) {
+    if (addr & 3) {
         if (!this.allow_unaligned_access()) {
             throw "Unaligned st_word: " + this.current + "@" + toStringHex32(addr);
         } else {
+            var mmu = this.mmu;
+            var memctlr = this.memctlr;
             for (var i=0; i < 4; i++) {
-                phyaddr = this.mmu.trans_to_phyaddr(addr + i);
-                this.memctlr.st_byte(phyaddr, bitops.get_bits(word, 8*i+7, 8*i));
+                phyaddr = mmu.trans_to_phyaddr(addr + i);
+                memctlr.st_byte(phyaddr, bitops.get_bits(word, 8*i+7, 8*i));
             }
         }
     } else {
@@ -1201,14 +1190,16 @@ CPU_ARMv7.prototype.st_word = function(addr, word) {
 
 CPU_ARMv7.prototype.ld_halfword = function(addr) {
     var phyaddr;
-    if (bitops.get_bit(addr, 0)) {
+    if (addr & 1) {
         if (!this.allow_unaligned_access()) {
             throw "Unaligned ld_halfword: " + this.current + "@" + toStringHex32(addr);
         } else {
             var val = 0;
+            var mmu = this.mmu;
+            var memctlr = this.memctlr;
             for (var i=0; i < 2; i++) {
-                phyaddr = this.mmu.trans_to_phyaddr(addr + i);
-                val = bitops.set_bits(val, 8*i+7, 8*i, this.memctlr.ld_byte(phyaddr));
+                phyaddr = mmu.trans_to_phyaddr(addr + i);
+                val = bitops.set_bits(val, 8*i+7, 8*i, memctlr.ld_byte(phyaddr));
             }
             return val;
         }
@@ -1220,13 +1211,15 @@ CPU_ARMv7.prototype.ld_halfword = function(addr) {
 
 CPU_ARMv7.prototype.st_halfword = function(addr, hw) {
     var phyaddr;
-    if (bitops.get_bit(addr, 0)) {
+    if (addr & 1) {
         if (!this.allow_unaligned_access()) {
             throw "Unaligned st_halfword: " + this.current + "@" + toStringHex32(addr);
         } else {
+            var mmu = this.mmu;
+            var memctlr = this.memctlr;
             for (var i=0; i < 2; i++) {
-                phyaddr = this.mmu.trans_to_phyaddr(addr + i);
-                this.memctlr.st_byte(phyaddr, bitops.get_bits(hw, 8*i+7, 8*i));
+                phyaddr = mmu.trans_to_phyaddr(addr + i);
+                memctlr.st_byte(phyaddr, bitops.get_bits(hw, 8*i+7, 8*i));
             }
         }
     } else {
@@ -1247,7 +1240,7 @@ CPU_ARMv7.prototype.st_byte = function(addr, b) {
 
 CPU_ARMv7.prototype.fetch_instruction = function(addr) {
     var phyaddr = this.mmu.trans_to_phyaddr(addr);
-    return this.memctlr.ld_word(phyaddr);
+    return this.memctlr.ld_word_fast(phyaddr);
 };
 
 /*
@@ -1315,47 +1308,26 @@ CPU_ARMv7.prototype.shift_c = function(value, type, amount, carry_in) {
         switch (type) {
             // FIXME
             case 0: // LSL
-                assert(amount > 0, "lsl: amount > 0");
+                //assert(amount > 0, "lsl: amount > 0");
                 var val64 = new Number64(0, value);
                 var extended = val64.lsl(amount);
-                this.carry_out = bitops.get_bit(extended.high, 0);
+                this.carry_out = extended.high & 1;
                 return extended.low;
             case 1: // LSR
-                assert(amount > 0, "lsr: amount > 0");
-                this.carry_out = (amount == 32) ? 0 : bitops.get_bit(value, amount - 1);
+                //assert(amount > 0, "lsr: amount > 0");
+                this.carry_out = (amount == 32) ? 0 : ((value >>> (amount - 1)) & 1);
                 result = bitops.lsr(value, amount);
-                //var result = value >>> amount;
-                assert(result >= 0, "lsr: result = " + result.toString());
+                //assert(result >= 0, "lsr: result = " + result.toString());
                 return result;
-                /*
-                var extended = bitops.zero_extend64(value, 32+amount);
-                assert(extended >= 0, "lsr: extended = " + extended.toString());
-                var result = bitops.get_bits64(extended, amount+32-1, amount);
-                assert(result >= 0, "lsr: result = " + result.toString());
-                this.carry_out = bitops.get_bit64(extended, amount-1);
-                return result;
-                */
             case 2: // ASR
-                assert(amount > 0, "asr: amount > 0");
-                this.carry_out = (amount == 32) ? 0 : bitops.get_bit(value, amount - 1);
+                //assert(amount > 0, "asr: amount > 0");
+                this.carry_out = (amount == 32) ? 0 : ((value >>> (amount - 1)) & 1);
                 result = bitops.asr(value, amount);
-                /*
-                var result = value >> amount;
-                if (result < 0)
-                    result += 0x100000000;
-                */
                 return result;
-                /*
-                var extended = bitops.sign_extend(value, 32, amount+32);
-                var result = bitops.get_bits64(extended, amount+32-1, amount);
-                this.carry_out = bitops.get_bit64(extended, amount-1);
-                assert(result >= 0, "asr");
-                return result;
-                */
             case 3: // RRX
-                this.carry_out = bitops.get_bit(value, 0);
+                this.carry_out = value & 1;
                 result = bitops.set_bit(value >>> 1, 31, carry_in);
-                assert(result >= 0, "rrx");
+                //assert(result >= 0, "rrx");
                 return result;
             case 4: // ROR
                 return this.ror_c(value, amount, true);
@@ -1367,16 +1339,11 @@ CPU_ARMv7.prototype.shift_c = function(value, type, amount, carry_in) {
 };
 
 CPU_ARMv7.prototype.ror_c = function(value, amount, write) {
-    assert(amount !== 0);
-    //var m = amount % 32;
-    //var result = bitops.or64(value >>> m, bitops.lsl(value, (32-m)));
+    //assert(amount !== 0);
     var result = bitops.ror(value, amount);
-    assert(result >= 0, "ror");
+    //assert(result >= 0, "ror");
     if (write)
-        this.carry_out = bitops.get_bit(result, 31);
-    //this.dump_value(value, "value");
-    //this.dump_value(amount, "amount");
-    //this.dump_value(result, "result");
+        this.carry_out = result >>> 31;
     return result;
 };
 
@@ -1394,8 +1361,13 @@ CPU_ARMv7.prototype.is_zero_bit = function(val) {
 };
 
 CPU_ARMv7.prototype.expand_imm_c = function(imm12, carry_in) {
-    var unrotated_value = bitops.zero_extend(bitops.get_bits(imm12, 7, 0), 32);
-    return this.shift_c(unrotated_value, this.SRType_ROR, 2*bitops.get_bits(imm12, 11, 8), carry_in);
+    var unrotated_value = imm12 & 0xff;
+    var amount = 2*(imm12 >>> 8);
+    if (!amount) {
+        this.carry_out = carry_in;
+        return unrotated_value;
+    }
+    return this.ror_c(unrotated_value, amount, true);
 };
 
 CPU_ARMv7.prototype.expand_imm = function(imm12) {
@@ -1403,11 +1375,14 @@ CPU_ARMv7.prototype.expand_imm = function(imm12) {
 };
 
 CPU_ARMv7.prototype.add_with_carry = function(x, y, carry_in) {
-    unsigned_sum = x + y + carry_in;
-    signed_sum = bitops.sint32(x) + bitops.sint32(y) + bitops.sint32(carry_in);
-    result = bitops.get_bits64(unsigned_sum, 31, 0);
-    this.carry_out = bitops.uint32(result) == unsigned_sum ? 0 : 1;
-    this.overflow = bitops.sint32(result) == signed_sum ? 0 : 1;
+    var unsigned_sum = x + y + carry_in;
+    var signed_sum = (x|0) + (y|0) + carry_in;
+    //var result = bitops.get_bits64(unsigned_sum, 31, 0);
+    var result = unsigned_sum % 0x100000000;
+    if (result < 0)
+        result += 0x100000000;
+    this.carry_out = (result == unsigned_sum) ? 0 : 1;
+    this.overflow = ((result|0) == signed_sum) ? 0 : 1;
     return result;
 };
 
@@ -1439,12 +1414,8 @@ CPU_ARMv7.prototype.is_valid = function(inst) {
     return (inst != 0xe1a00000 && inst !== 0); // NOP or NULL?
 };
 
-CPU_ARMv7.prototype.has_cond = function(inst_name) {
-    return !this.no_cond_insts[inst_name];
-};
-
 CPU_ARMv7.prototype.cond = function(inst) {
-    var cond = bitops.get_bits(inst, 31, 28);
+    var cond = inst >>> 28;
     var ret = false;
     switch (cond >> 1) {
         case 0:
@@ -1474,10 +1445,8 @@ CPU_ARMv7.prototype.cond = function(inst) {
         default:
             break;
     }
-    if ((cond & 1) == 1 && cond !== 0xf)
+    if ((cond & 1) && cond !== 0xf)
         ret = !ret;
-    //if (cond !== 0xe)
-    //    logger.log("\tCond(" + ret + "): " + cond.toString(16) + "(" + cond.toString(2) + ")");
     return ret;
 };
 
@@ -1492,14 +1461,10 @@ CPU_ARMv7.prototype.cond = function(inst) {
  */
 CPU_ARMv7.prototype.adc_imm = function(inst, addr) {
     this.print_inst("ADC (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s == 1) {
-        // SEE SUBS PC, LR and related instructions
-        this.abort_not_impl("ADC (immediate)", inst, addr);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
     var ret = this.add_with_carry(this.reg(n), imm32, this.cpsr.c);
     if (d == 15) {
@@ -1514,21 +1479,10 @@ CPU_ARMv7.prototype.adc_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.add_imm = function(inst, addr) {
     this.print_inst("ADD (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (n == 15 && s === 0) {
-        // SEE ADR
-        this.abort_not_impl("ADD (immediate)", inst, addr);
-    }
-    if (n == 13) {
-        this.sp_used("ADD (immediate)", inst, addr);
-    }
-    if (d == 15 && s == 1) {
-        // SEE SUBS PC, LR and related instructions
-        this.abort_not_impl("ADD (immediate)", inst, addr);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
     var ret = this.add_with_carry(this.reg(n), imm32, 0);
     if (d == 15) {
@@ -1543,10 +1497,9 @@ CPU_ARMv7.prototype.add_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.adr_a1 = function(inst, addr) {
     this.print_inst("ADR A1", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
-    // (Align(PC,4) + imm32)
     var ret = this.align(this.get_pc(), 4) + imm32;
     if (d == 15) {
         this.branch_to = ret;
@@ -1558,8 +1511,8 @@ CPU_ARMv7.prototype.adr_a1 = function(inst, addr) {
 
 CPU_ARMv7.prototype.adr_a2 = function(inst, addr) {
     this.print_inst("ADR A2", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
     var ret = this.align(this.get_pc(), 4) - imm32;
     if (d == 15) {
@@ -1572,11 +1525,12 @@ CPU_ARMv7.prototype.adr_a2 = function(inst, addr) {
 
 CPU_ARMv7.prototype.and_imm = function(inst, addr) {
     this.print_inst("AND (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
+
     var valn = this.reg(n);
     var ret = bitops.and(valn, imm32);
     if (d == 15) {
@@ -1591,10 +1545,10 @@ CPU_ARMv7.prototype.and_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.asr_imm = function(inst, addr) {
     this.print_inst("ASR (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var m = bitops.get_bits(inst, 3, 0);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var m = inst & 0xf;
     this.decode_imm_shift(2, imm5);
     var ret = this.shift_c(this.reg(m), this.SRType_ASR, this.shift_n, this.cpsr.c);
     if (d == 15) {
@@ -1609,13 +1563,11 @@ CPU_ARMv7.prototype.asr_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.bic_imm = function(inst, addr) {
     this.print_inst("BIC (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s == 1) {
-        throw "BIC (immediate)";
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
     var ret = bitops.and(valn, bitops.not(imm32));
@@ -1631,9 +1583,13 @@ CPU_ARMv7.prototype.bic_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.b = function(inst, addr) {
     this.print_inst("B", inst, addr);
-    var imm24 = bitops.get_bits(inst, 23, 0);
+    var imm24 = inst & 0x00ffffff;
     //imm32 = SignExtend(imm24:'00', 32);
-    var imm32 = bitops.sign_extend(imm24 << 2, 26, 32);
+    //var imm32 = bitops.sign_extend(imm24 << 2, 26, 32);
+    var imm26 = imm24 << 2;
+    var imm32 = imm26;
+    if (imm26 & 0x02000000)
+        imm32 = imm26 | 0xfc000000;
     this.branch_to = this.get_pc() + imm32;
     if (this.branch_to >= 0x100000000)
         this.branch_to -= 0x100000000;
@@ -1642,10 +1598,14 @@ CPU_ARMv7.prototype.b = function(inst, addr) {
 
 CPU_ARMv7.prototype.bl_imm = function(inst, addr) {
     this.print_inst("BL, BLX (immediate)", inst, addr);
-    var imm24 = bitops.get_bits(inst, 23, 0);
-    var imm32 = bitops.sign_extend(imm24 << 2, 26, 32);
+    //var imm24 = bitops.get_bits(inst, 23, 0);
+    //var imm32 = bitops.sign_extend(imm24 << 2, 26, 32);
+    var imm24 = inst & 0x00ffffff;
+    var imm26 = imm24 << 2;
+    var imm32 = imm26;
+    if (imm26 & 0x02000000)
+        imm32 = imm26 | 0xfc000000;
     this.regs[14] = this.get_pc() - 4;
-    // SelectInstrSet(InstrSet_ARM);
     // BranchWritePC(Align(PC,4) + imm32);
     this.branch_to = this.align(bitops.lsl((this.get_pc()) >>> 2, 2), 4) + imm32;
     if (this.branch_to >= 0x100000000)
@@ -1655,8 +1615,9 @@ CPU_ARMv7.prototype.bl_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.cmn_imm = function(inst, addr) {
     this.print_inst("CMN (immediate)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
     var imm32 = this.expand_imm(imm12);
     var ret = this.add_with_carry(valn, imm32, 0);
@@ -1666,8 +1627,8 @@ CPU_ARMv7.prototype.cmn_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.cmp_imm = function(inst, addr) {
     this.print_inst("CMP (immediate)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var n = (inst >>>  16) & 0xf;
+    var imm12 = inst & 0xfff;
     var valn = this.reg(n);
     var imm32 = this.expand_imm(imm12);
     var ret = this.add_with_carry(valn, bitops.not(imm32), 1);
@@ -1677,11 +1638,12 @@ CPU_ARMv7.prototype.cmp_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.eor_imm = function(inst, addr) {
     this.print_inst("EOR (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
+
     var valn = this.reg(n);
     var ret = bitops.xor(valn, imm32);
     if (d == 15) {
@@ -1696,75 +1658,54 @@ CPU_ARMv7.prototype.eor_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldr_imm = function(inst, addr) {
     this.print_inst("LDR (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (n == 15)
-        throw "SEE LDR (literal)";
-    if (p === 0 && w == 1)
-        throw "SEE LDRT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm12 = (inst & 0xfff);
+
     if (n == 13 && p === 0 && u == 1 && w === 0 && imm12 === 4) {
         // POP A2
-        if (t == 13)
-            this.abort_unpredictable("POP", inst, addr);
         this.regs[t] = this.ld_word(this.regs[13]);
-        //this.regs[13] = Number.NaN; // XXX
         this.regs[13] = this.regs[13] + 4;
         this.print_inst_unimpl(addr, inst, "pop");
         return;
     }
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var imm32 = imm12;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (is_wback && n == t)
-        this.abort_unpredictable("LDR (immediate)", inst, addr);
+
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
-    //this.log_value(address, "address");
     var data = this.ld_word(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (t == 15) {
-        if (bitops.get_bits(address, 1, 0) === 0) {
-            this.branch_to = data;
-        } else {
-            this.abort_unpredictable("LDR (immediate)", address);
-        }
-    } else if (this.unaligned_support() || (address = bitops.clear_bits(address, 1, 0))) {
+    if (t == 15)
+        this.branch_to = data;
+    else
         this.regs[t] = data;
-    } else {
-        this.abort_not_impl("Can only apply before ARMv7", inst, addr);
-    }
     this.print_inst_imm(addr, inst, "ldr", null, t, n, imm32, true, is_wback, is_add, is_index);
 };
 
 CPU_ARMv7.prototype.ldrb_imm = function(inst, addr) {
     this.print_inst("LDRB (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (n == 15)
-        throw "SEE LDRB (literal)";
-    if (p === 0 && w == 1)
-        throw "SEE LDRBT";
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm32 = inst & 0xfff;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || (is_wback && n == t))
-        this.abort_unpredictable("LDRB (immediate)", inst, addr);
+
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
-    var data = bitops.zero_extend(this.ld_byte(address), 32);
+    var data = this.ld_byte(address);
     this.regs[t] = data;
     if (is_wback)
         this.regs[n] = offset_addr;
@@ -1773,28 +1714,19 @@ CPU_ARMv7.prototype.ldrb_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldrd_imm = function(inst, addr) {
     this.print_inst("LDRD (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (n == 15)
-        throw "SEE LDRD (literal)";
-    if (bitops.get_bit(t, 0) == 1)
-        this.abort_undefined("LDRD (immediate)", inst, addr);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
     var t2 = t + 1;
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (p === 0 && w == 1)
-        this.abort_unpredictable("LDRD (immediate)", inst, addr);
-    if (is_wback && (n == t || n == t2))
-        this.abort_unpredictable("LDRD (immediate)", inst, addr);
-    if (t2 == 15)
-        this.abort_unpredictable("LDRD (immediate)", inst, addr);
+
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
@@ -1807,54 +1739,39 @@ CPU_ARMv7.prototype.ldrd_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldrsh_imm = function(inst, addr) {
     this.print_inst("LDRSH (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (n == 15)
-        throw "SEE LDRSH (literal)";
-    if (p === 0 && w == 1)
-        throw "SEE LDRSHT";
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || (is_wback && n == t))
-        this.abort_unpredictable("LDRSH (immediate)", inst, addr);
+
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
     var data = this.ld_halfword(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0))) {
-        this.regs[t] = bitops.sign_extend(data, 16, 32);
-    } else {
-        throw "LDRSH";
-    }
+    this.regs[t] = bitops.sign_extend(data, 16, 32);
     this.print_inst_imm(addr, inst, "ldrsh", null, t, n, imm32, true, is_wback, is_add, is_index);
 };
 
 CPU_ARMv7.prototype.ldrsh_reg = function(inst, addr) {
     this.print_inst("LDRSH (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE LDRSHT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("LDRSH (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("LDRSH (register)", inst, addr);
 
     var valn= this.reg(n);
     var offset = this.shift(this.reg(m), this.SRType_LSL, 0, this.cpsr.c);
@@ -1863,23 +1780,17 @@ CPU_ARMv7.prototype.ldrsh_reg = function(inst, addr) {
     var data = this.ld_halfword(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0))) {
-        this.regs[t] = bitops.sign_extend(data, 16, 32);
-    } else {
-        throw "LDRSH";
-    }
+    this.regs[t] = bitops.sign_extend(data, 16, 32);
     this.print_inst_reg(addr, inst, "ldrsh", null, t, n, m, this.SRType_LSL, 0);
 };
 
 CPU_ARMv7.prototype.lsl_imm = function(inst, addr) {
     this.print_inst("LSL (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (imm5 === 0) {
-        throw "LSL (immediate)";
-    }
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var m = inst & 0xf;
+
     var valm = this.reg(m);
     this.decode_imm_shift(0, imm5);
     var ret = this.shift_c(valm, this.SRType_LSL, this.shift_n, this.cpsr.c);
@@ -1895,10 +1806,11 @@ CPU_ARMv7.prototype.lsl_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.lsr_imm = function(inst, addr) {
     this.print_inst("LSR (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var m = bitops.get_bits(inst, 3, 0);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var m = inst & 0xf;
+
     var valm = this.reg(m);
     this.decode_imm_shift(1, imm5);
     var ret = this.shift_c(valm, this.SRType_LSR, this.shift_n, this.cpsr.c);
@@ -1914,13 +1826,11 @@ CPU_ARMv7.prototype.lsr_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.mov_imm_a1 = function(inst, addr) {
     this.print_inst("MOV (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s == 1) {
-        this.abort_not_impl("MOV (immediate) A1", inst, addr);
-    }
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
+
     var ret = imm32;
     if (d == 15) {
         this.branch_to = ret;
@@ -1934,12 +1844,11 @@ CPU_ARMv7.prototype.mov_imm_a1 = function(inst, addr) {
 
 CPU_ARMv7.prototype.mov_imm_a2 = function(inst, addr) {
     this.print_inst("MOV (immediate) A2", inst, addr);
-    var imm4 = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    var imm32 = bitops.zero_extend((imm4 << 12) + imm12, 32);
-    if (d == 15)
-        this.abort_not_impl("MOV (immediate) A2", inst, addr);
+    var imm4 = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
+    var imm32 = (imm4 << 12) + imm12;
+
     var ret = imm32;
     if (d == 15) {
         this.branch_to = ret;
@@ -1951,38 +1860,28 @@ CPU_ARMv7.prototype.mov_imm_a2 = function(inst, addr) {
 
 CPU_ARMv7.prototype.msr_imm_sys = function(inst, addr) {
     this.print_inst("MSR (immediate) (system level)", inst, addr);
-    var r = bitops.get_bit(inst, 22);
-    var mask = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (r === 0 && mask === 0)
-        throw "Related encodings";
+    var r = inst & (1 << 22);
+    var mask = (inst >>> 16) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
-    var write_spsr = r == 1;
-    if (mask === 0)
-        this.abort_unpredictable("MSR (immediate) (system level)", inst, addr);
-    if (r == 15) // manual wrong?
-        this.abort_unpredictable("MSR (immediate) (system level)", inst, addr);
-    if (r == 1) {
+
+    if (r) {
         // SPSRWriteByInstr(R[n], mask);
-        //this.abort_not_impl("SPSRWriteByInstr(R[n], mask);", inst, addr);
         this.spsr_write_by_instr(this.parse_psr(imm32), mask);
     } else {
         // CPSRWriteByInstr(R[n], mask, FALSE);
-        //this.log_value(imm32, "imm32");
         this.cpsr_write_by_instr(this.parse_psr(imm32), mask, false);
     }
     this.print_inst_msr(addr, inst, null, imm32);
-    //throw "MSR (immediate) (system level)";
 };
 
 CPU_ARMv7.prototype.mvn_imm = function(inst, addr) {
     this.print_inst("MVN (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s == 1)
-        throw "SEE SUBS PC, LR and related instructions";
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
+
     var ret = bitops.not(imm32);
     if (d == 15) {
         this.branch_to = ret;
@@ -1996,13 +1895,11 @@ CPU_ARMv7.prototype.mvn_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.orr_imm = function(inst, addr) {
     this.print_inst("ORR (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s == 1) {
-        throw "ORR (immediate)";
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
     var ret = bitops.or(valn, imm32);
@@ -2023,11 +1920,12 @@ CPU_ARMv7.prototype.hint_preload_data = function(address) {
 
 CPU_ARMv7.prototype.pld_imm = function(inst, addr) {
     this.print_inst("PLD (immediate, literal)", inst, addr);
-    var u = bitops.get_bit(inst, 23);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var u = (inst >>> 23) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var imm32 = imm12;
     var is_add = u == 1;
     var base = (n == 15) ? this.align(this.get_pc(), 4) : valn;
     var address = base + (is_add ? imm32 : -imm32);
@@ -2037,18 +1935,12 @@ CPU_ARMv7.prototype.pld_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.rsb_imm = function(inst, addr) {
     this.print_inst("RSB (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s)
-        // SEE SUBS PC, LR and related instructions
-        this.abort_not_impl("RSB (immediate)", inst, addr);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
     var valn = this.reg(n);
-    //this.log_value(imm32, "imm32");
-    //this.log_value(valn, "valn");
-    //this.log_value(bitops.not(valn), "~valn");
     var ret = this.add_with_carry(bitops.not(valn), imm32, 1);
     if (d == 15) {
         this.branch_to = ret;
@@ -2062,13 +1954,10 @@ CPU_ARMv7.prototype.rsb_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.rsc_imm = function(inst, addr) {
     this.print_inst("RSC (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s)
-        // SEE SUBS PC, LR and related instructions
-        this.abort_not_impl("RSC (immediate)", inst, addr);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
 
     var valn = this.reg(n);
@@ -2085,13 +1974,11 @@ CPU_ARMv7.prototype.rsc_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ror_imm = function(inst, addr) {
     this.print_inst("ROR (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (imm5 === 0) {
-        throw "SEE RRX";
-    }
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var m = inst & 0xf;
+
     var valm = this.reg(m);
     this.decode_imm_shift(3, imm5);
     var ret = this.shift_c(valm, this.SRType_ROR, this.shift_n, this.cpsr.c);
@@ -2107,9 +1994,10 @@ CPU_ARMv7.prototype.ror_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.rrx = function(inst, addr) {
     this.print_inst("RRX", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+
     var valm = this.reg(m);
     var ret = this.shift_c(valm, this.SRType_RRX, 1, this.cpsr.c);
     if (d == 15) {
@@ -2125,14 +2013,12 @@ CPU_ARMv7.prototype.rrx = function(inst, addr) {
 
 CPU_ARMv7.prototype.sbc_imm = function(inst, addr) {
     this.print_inst("SBC (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s)
-        // SEE SUBS PC, LR and related instructions
-        this.abort_not_impl("SBC (immediate)", inst, addr);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
+
     var valn = this.reg(n);
     var ret = this.add_with_carry(valn, bitops.not(imm32), this.cpsr.c);
     if (d == 15) {
@@ -2147,39 +2033,30 @@ CPU_ARMv7.prototype.sbc_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.str_imm = function(inst, addr) {
     this.print_inst("STR (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (p === 0 && w == 1)
-        throw "SEE STRT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var address;
     if (n == 13 && p == 1 && u === 0 && w == 1 && imm12 == 4) {
         // PUSH A2
-        if (t == 13)
-            this.abort_unpredictable("POP", inst, addr);
         var sp = this.reg(13);
         address = sp - 4;
         this.st_word(address, this.reg(t));
         this.regs[13] = sp - 4;
-        this.print_inst_unimpl(addr, inst, "push");
         return;
     }
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var imm32 = imm12;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STR (immediate)", inst, addr);
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     address = is_index ? offset_addr : valn;
     var valt = this.reg(t);
     this.st_word(address, valt);
-    //this.log_value(address, "address");
-    //this.log_value(valt, "valt");
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_imm(addr, inst, "str", null, t, n, imm32, true, is_wback, is_add, is_index);
@@ -2187,30 +2064,20 @@ CPU_ARMv7.prototype.str_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.strb_imm = function(inst, addr) {
     this.print_inst("STRB (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (p === 0 && w == 1)
-        throw "SEE STRBT";
-    var imm32 = bitops.zero_extend(imm12, 32);
-    if (t == 15)
-        this.abort_unpredictable("STRB (immediate)", inst, addr);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm32 = inst & 0xfff;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STRB (immediate)", inst, addr);
+
     var valn= this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
-    if (t == 15) {
-        this.st_byte(address, bitops.get_bits(this.get_pc(), 7, 0));
-    } else {
-        this.st_byte(address, bitops.get_bits(this.regs[t], 7, 0));
-    }
+    this.st_byte(address, this.reg(t) & 0xff);
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_imm(addr, inst, "strb", null, t, n, imm32, true, is_wback, is_add, is_index);
@@ -2218,19 +2085,12 @@ CPU_ARMv7.prototype.strb_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.sub_imm = function(inst, addr) {
     this.print_inst("SUB (immediate)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    if (d == 15 && s === 0)
-        throw "SEE ADR";
-    if (n == 13) {
-        //throw "SEE SUB (SP minus immediate)";
-        this.sp_used("SUB (immediate)", inst);
-    }
-    if (n == 15 && s == 1)
-        throw "SEE SUBS PC, LR and related instructions";
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
     var imm32 = this.expand_imm(imm12);
+
     var ret = this.add_with_carry(this.reg(n), bitops.not(imm32), 1);
     if (d == 15) {
         this.branch_to = ret;
@@ -2244,8 +2104,9 @@ CPU_ARMv7.prototype.sub_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.teq_imm = function(inst, addr) {
     this.print_inst("TEQ (immediate)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
     var ret = bitops.xor(valn, imm32);
@@ -2255,8 +2116,9 @@ CPU_ARMv7.prototype.teq_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.tst_imm = function(inst, addr) {
     this.print_inst("TST (immediate)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm12 = bitops.get_bits(inst, 11, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm12 = inst & 0xfff;
+
     var valn = this.reg(n);
     var imm32 = this.expand_imm_c(imm12, this.cpsr.c);
     var ret = bitops.and(valn, imm32);
@@ -2269,24 +2131,17 @@ CPU_ARMv7.prototype.tst_imm = function(inst, addr) {
  */
 CPU_ARMv7.prototype.ldr_lit = function(inst, addr) {
     this.print_inst("LDR (literal)", inst, addr);
-    var u = bitops.get_bit(inst, 23);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var u = inst & (1 << 23);
+    var t = (inst >>> 12) & 0xf;
+    var imm32 = inst & 0xfff;
+
     var base = this.align(this.get_pc(), 4);
     var address = base + (u ? imm32 : -imm32);
     var data = this.ld_word(address);
-    //this.log_value(address, "address");
-    if (t == 15) {
-        if (bitops.get_bits(address, 1, 0) === 0) {
-            this.branch_to = data;
-        } else
-            this.abort_unpredictable("LDR (literal)", address);
-    } else if (this.unaligned_support() || (address = bitops.clear_bits(address, 1, 0))) {
+    if (t == 15)
+        this.branch_to = data;
+    else
         this.regs[t] = data;
-    } else {
-        this.abort_not_impl("Can only apply before ARMv7", inst, addr);
-    }
     this.print_inst_imm(addr, inst, "ldr", null, t, 15, imm32, true, null, u, true);
 };
 
@@ -2295,18 +2150,15 @@ CPU_ARMv7.prototype.ldr_lit = function(inst, addr) {
  */
 CPU_ARMv7.prototype.adc_reg = function(inst, addr) {
     this.print_inst("ADC (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s)
-        // SEE SUBS PC, LR and related instructions;
-        this.abort_not_impl("ADC (register)", inst, addr);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
-    // (shift_t, shift_n) = DecodeImmShift(type, imm5);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift(valm, this.shift_t, this.shift_n, this.cpsr.c);
     var ret = this.add_with_carry(valn, shifted, this.cpsr.c);
@@ -2322,21 +2174,15 @@ CPU_ARMv7.prototype.adc_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.add_reg = function(inst, addr) {
     this.print_inst("ADD (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        // SEE SUBS PC, LR and related instructions;
-        this.abort_not_impl("ADD (register)", inst, addr);
-    if (n == 13) {
-        this.sp_used("ADD (register)", inst);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
-    // (shift_t, shift_n) = DecodeImmShift(type, imm5);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift(valm, this.shift_t, this.shift_n, this.cpsr.c);
     var ret = this.add_with_carry(valn, shifted, 0);
@@ -2352,14 +2198,13 @@ CPU_ARMv7.prototype.add_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.and_reg = function(inst, addr) {
     this.print_inst("AND (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        throw "SEE SUBS PC, LR and related instructions;";
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -2377,12 +2222,11 @@ CPU_ARMv7.prototype.and_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.asr_reg = function(inst, addr) {
     this.print_inst("ASR (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("ASR (register)", inst, addr);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var shift_n = bitops.get_bits(this.reg(m), 7, 0);
     var ret = this.shift_c(this.reg(n), this.SRType_ASR, shift_n, this.cpsr.c);
     if (d == 15) {
@@ -2397,14 +2241,13 @@ CPU_ARMv7.prototype.asr_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.bic_reg = function(inst, addr) {
     this.print_inst("BIC (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        throw "SEE SUBS PC, LR and related instructions;";
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -2422,11 +2265,10 @@ CPU_ARMv7.prototype.bic_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.bfc = function(inst, addr) {
     this.print_inst("BFC", inst, addr);
-    var msbit = bitops.get_bits(inst, 20, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var lsbit = bitops.get_bits(inst, 11, 7);
-    if (d == 15)
-        this.abort_unpredictable("BFC", inst, addr);
+    var msbit = (inst >>> 16) & 0x1f;
+    var d = (inst >>> 12) & 0xf;
+    var lsbit = (inst >>> 7) & 0x1f;
+
     if (msbit >= lsbit)
         this.regs[d] = bitops.clear_bits(this.regs[d], msbit, lsbit);
     else
@@ -2436,14 +2278,11 @@ CPU_ARMv7.prototype.bfc = function(inst, addr) {
 
 CPU_ARMv7.prototype.bfi = function(inst, addr) {
     this.print_inst("BFI", inst, addr);
-    var msbit = bitops.get_bits(inst, 20, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var lsbit = bitops.get_bits(inst, 11, 7);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (n == 15)
-        throw "SEE BFC";
-    if (d == 15)
-        this.abort_unpredictable("BFI", inst, addr);
+    var msbit = (inst >>> 16) & 0x1f;
+    var d = (inst >>> 12) & 0xf;
+    var lsbit = (inst >>> 7) & 0x1f;
+    var n = inst & 0xf;
+
     if (msbit >= lsbit)
         this.regs[d] = bitops.set_bits(this.regs[d], msbit, lsbit, bitops.get_bits(this.reg(n), msbit-lsbit, 0));
     else
@@ -2453,12 +2292,10 @@ CPU_ARMv7.prototype.bfi = function(inst, addr) {
 
 CPU_ARMv7.prototype.blx_reg = function(inst, addr) {
     this.print_inst("BLX (register)", inst, addr);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (m == 15)
-        this.abort_unpredictable("BLX (register)", inst, addr);
+    var m = inst & 0xf;
+
     var next_instr_addr = this.get_pc() - 4;
     this.regs[14] = next_instr_addr;
-    // BXWritePC(R[m]);
     this.branch_to = this.reg(m);
     //this.print_inst_reg(addr, inst, "blx", null, null, null, m);
     this.print_inst_branch(addr, inst, "blx", this.branch_to, m);
@@ -2466,20 +2303,17 @@ CPU_ARMv7.prototype.blx_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.bx = function(inst, addr) {
     this.print_inst("BX", inst, addr);
-    var m = bitops.get_bits(inst, 3, 0);
-    // BXWritePC(R[m]);
+    var m = inst & 0xf;
+
     this.branch_to = this.reg(m);
     this.print_inst_branch(addr, inst, "bx", this.branch_to, m);
 };
 
 CPU_ARMv7.prototype.cdp_a1 = function(inst, addr) {
     this.print_inst("CDP, CDP2 A1?", inst, addr);
-    //var opc1 = bitops.get_bits(inst, 23, 21);
-    //var crn = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var cp = bitops.get_bits(inst, 11, 8);
-    //var opc2 = bitops.get_bits(inst, 7, 5);
-    //var crm = bitops.get_bits(inst, 3, 0);
+    var t = (inst >>> 12) & 0xf;
+    var cp = (inst >>> 8) & 0xf;
+
     if ((cp >> 1) == 5) {
         this.abort_simdvfp_inst(inst, addr);
     }
@@ -2494,20 +2328,20 @@ CPU_ARMv7.prototype.cdp_a1 = function(inst, addr) {
 
 CPU_ARMv7.prototype.clz = function(inst, addr) {
     this.print_inst("CLZ", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("CLZ", inst, addr);
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+
     this.regs[d] = bitops.count_leading_zero_bits(this.reg(m));
     this.print_inst_reg(addr, inst, "clz", null, d, null, m);
 };
 
 CPU_ARMv7.prototype.cmn_reg = function(inst, addr) {
     this.print_inst("CMN (register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -2519,10 +2353,11 @@ CPU_ARMv7.prototype.cmn_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.cmp_reg = function(inst, addr) {
     this.print_inst("CMP (register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -2534,18 +2369,15 @@ CPU_ARMv7.prototype.cmp_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.eor_reg = function(inst, addr) {
     this.print_inst("EOR (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        // SEE SUBS PC, LR and related instructions;
-        this.abort_not_impl("EOR (register)", inst, addr);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
-    // (shift_t, shift_n) = DecodeImmShift(type, imm5);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift_c(valm, this.shift_t, this.shift_n, this.cpsr.c);
     var ret = bitops.xor(valn, shifted);
@@ -2561,79 +2393,55 @@ CPU_ARMv7.prototype.eor_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldr_reg = function(inst, addr) {
     this.print_inst("LDR (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE LDRT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (m == 15)
-        this.abort_unpredictable("LDR (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("LDR (register)", inst, addr);
 
     var valn = this.reg(n);
     this.decode_imm_shift(type, imm5);
     var offset = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
     var address = is_index ? offset_addr : valn;
-    //this.dump_value(valn, "valn");
-    //this.dump_value(offset, "offset");
-    //this.dump_value(offset_addr, "offset_addr");
-    //this.dump_value(address, "address");
-    //address = bitops.get_bits64(address, 31, 0); // XXX
     address = bitops.get_bits64(address, 31, 0); // XXX
-    //this.dump_value(address, "address");
     var data = this.ld_word(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (t == 15) {
-        if (bitops.get_bits(address, 1, 0) === 0) {
-            this.branch_to = data;
-        } else {
-            this.abort_unpredictable("LDR (register)", address);
-        }
-    } else if (this.unaligned_support() || (address = bitops.clear_bits(address, 1, 0))) {
+    if (t == 15)
+        this.branch_to = data;
+    else
         this.regs[t] = data;
-    } else {
-        this.abort_not_impl("Can only apply before ARMv7", inst, addr);
-    }
     this.print_inst_reg(addr, inst, "ldr", null, t, n, m, this.shift_t, this.shift_n, true, is_wback);
 };
 
 CPU_ARMv7.prototype.ldrb_reg = function(inst, addr) {
     this.print_inst("LDRB (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE LDRBT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
+
     this.decode_imm_shift(type, imm5);
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("LDRB (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("LDRB (register)", inst, addr);
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
     var address = is_index ? offset_addr : valn;
     var data = this.ld_byte(address);
-    this.regs[t] = bitops.zero_extend(data, 32);
+    this.regs[t] = data;
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_reg(addr, inst, "ldrb", null, t, n, m, this.shift_t, this.shift_n, true, is_wback, is_index);
@@ -2641,22 +2449,17 @@ CPU_ARMv7.prototype.ldrb_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldrd_reg = function(inst, addr) {
     this.print_inst("LDRD (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var t2 = t + 1;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (p === 0 && w == 1)
-        this.abort_unpredictable("LDRD (register)", inst, addr);
-    if (t2 == 15 || m == 15 || m == t || m == t2)
-        this.abort_unpredictable("LDRD (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t || n == t2))
-        this.abort_unpredictable("LDRD (register)", inst, addr);
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     var offset_addr = valn + (is_add ? valm : -valm);
@@ -2672,9 +2475,8 @@ CPU_ARMv7.prototype.ldrex = function(inst, addr) {
     this.print_inst("LDREX", inst, addr);
     var n = bitops.get_bits(inst, 19, 16);
     var t = bitops.get_bits(inst, 15, 12);
+
     var imm32 = 0;
-    if (t == 15 || n == 15)
-        this.abort_unpredictable("LDREX", inst, addr);
     var address = this.reg(n) + imm32;
     // SetExclusiveMonitors(address,4);
     // R[t] = MemA[address,4];
@@ -2684,12 +2486,11 @@ CPU_ARMv7.prototype.ldrex = function(inst, addr) {
 
 CPU_ARMv7.prototype.lsl_reg = function(inst, addr) {
     this.print_inst("LSL (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("LSL (register)", inst, addr);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var shift_n = bitops.get_bits(this.reg(m), 7, 0);
     var ret = this.shift_c(this.reg(n), this.SRType_LSL, shift_n, this.cpsr.c);
     if (d == 15) {
@@ -2704,12 +2505,11 @@ CPU_ARMv7.prototype.lsl_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.lsr_reg = function(inst, addr) {
     this.print_inst("LSR (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("LSR (register)", inst, addr);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var shift_n = bitops.get_bits(this.reg(m), 7, 0);
     var ret = this.shift_c(this.reg(n), this.SRType_LSR, shift_n, this.cpsr.c);
     if (d == 15) {
@@ -2724,12 +2524,9 @@ CPU_ARMv7.prototype.lsr_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.mcr_a1 = function(inst, addr) {
     this.print_inst("MCR, MCR2 A1", inst, addr);
-    //var opc1 = bitops.get_bits(inst, 23, 21);
-    //var crn = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var cp = bitops.get_bits(inst, 11, 8);
-    //var opc2 = bitops.get_bits(inst, 7, 5);
-    //var crm = bitops.get_bits(inst, 3, 0);
+    var t = (inst >>> 12) & 0xf;
+    var cp = (inst >>> 8) & 0xf;
+
     if ((cp >> 1) == 5) {
         this.abort_simdvfp_inst(inst, addr);
     }
@@ -2743,13 +2540,12 @@ CPU_ARMv7.prototype.mcr_a1 = function(inst, addr) {
 
 CPU_ARMv7.prototype.mla = function(inst, addr) {
     this.print_inst("MLA", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 19, 16);
-    var a = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || a == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("MLA", inst, addr);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 16) & 0xf;
+    var a = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var ope1 = this.reg(n);
     var ope2 = this.reg(m);
     var addend = this.reg(a);
@@ -2760,23 +2556,21 @@ CPU_ARMv7.prototype.mla = function(inst, addr) {
     var ret = n64.add(n64_addend);
     this.regs[d] = ret.low;
     if (s) {
-        this.cpsr.n = bitops.get_bit(ret.low, 31);
-        this.cpsr.z = ret.is_zero() ? 1 : 0;
+        this.cpsr.n = (ret.low >>> 31) & 1;
+        this.cpsr.z = (ret === 0) ? 1 : 0;
         this.log_apsr();
     }
     this.print_inst_reg(addr, inst, "mla", s, d, n, m); // FIXME
-    //throw "MLA";
 };
 
 
 CPU_ARMv7.prototype.mls = function(inst, addr) {
     this.print_inst("MLS", inst, addr);
-    var d = bitops.get_bits(inst, 19, 16);
-    var a = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || a == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("MLS", inst, addr);
+    var d = (inst >>> 16) & 0xf;
+    var a = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var ope1 = this.reg(n);
     var ope2 = this.reg(m);
     var addend = this.reg(a);
@@ -2786,19 +2580,16 @@ CPU_ARMv7.prototype.mls = function(inst, addr) {
     var n64 = n64_ope1.mul(n64_ope2);
     var ret = n64_addend.sub(n64);
     this.regs[d] = ret.low;
-    //this.log_value(ope1, "ope1");
-    //this.log_value(ope2, "ope2");
-    //this.log_value(addend, "addend");
-    //this.log_value(ret.low, "ret");
     this.print_inst_mul(addr, inst, "mls", null, n, d, m, a);
 };
 
 CPU_ARMv7.prototype.subs_pc_lr_a2 = function(inst, addr) {
-    var opcode = bitops.get_bits(inst, 24, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var opcode = (inst >>> 21) & 0xf;
+    var n = (inst >>> 16) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     this.decode_imm_shift(type, imm5);
     var operand2 = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
     var ret;
@@ -2849,26 +2640,23 @@ CPU_ARMv7.prototype.subs_pc_lr_a2 = function(inst, addr) {
 };
 
 CPU_ARMv7.prototype.mov_reg = function(inst, addr) {
-    this.print_inst("MOV (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    var ret;
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     if (d == 15 && s) {
         this.print_inst("SUBS PC LR A2", inst, addr);
         this.subs_pc_lr_a2(inst, addr);
         return;
     }
-    var valm = this.reg(m);
-    ret = valm;
+
+    var ret = this.reg(m);
     if (d == 15) {
         this.branch_to = ret;
     } else {
         this.regs[d] = ret;
         if (s) {
-            //this.set_apsr(ret, false);
-            this.cpsr.n = bitops.get_bit(ret, 31);
-            this.cpsr.z = this.is_zero_bit(ret);
+            this.cpsr.n = ret >>> 31;
+            this.cpsr.z = (ret === 0) ? 1 : 0;
             // FIXME: APSR.C = carry;
             // I guess carry == 0
             //this.cpsr.c(bitops.get_bit(value, 29));
@@ -2877,16 +2665,11 @@ CPU_ARMv7.prototype.mov_reg = function(inst, addr) {
         }
     }
     this.print_inst_reg(addr, inst, "mov", s, d, null, m);
-    //throw "MOV (register)";
 };
 
 CPU_ARMv7.prototype.mrc_a1 = function(inst, addr) {
-    //var opc1 = bitops.get_bits(inst, 23, 21);
-    //var crn = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var cp = bitops.get_bits(inst, 11, 8);
-    //var opc2 = bitops.get_bits(inst, 7, 5);
-    //var crm = bitops.get_bits(inst, 3, 0);
+    var t = (inst >>> 12) & 0xf;
+    var cp = (inst >>> 8) & 0xf;
     if ((cp >> 1) == 5) {
         this.abort_simdvfp_inst(inst, addr);
     }
@@ -2896,22 +2679,22 @@ CPU_ARMv7.prototype.mrc_a1 = function(inst, addr) {
         var value = this.coproc_get_word(cp, inst);
         if (t != 15) {
             this.regs[t] = value;
-        } else
-            this.cpsr.n = bitops.get_bit(value, 31);
-            this.cpsr.z = bitops.get_bit(value, 30);
-            this.cpsr.c = bitops.get_bit(value, 29);
-            this.cpsr.v = bitops.get_bit(value, 28);
+        } else {
+            this.cpsr.n = (value >>> 31) & 1;
+            this.cpsr.z = (value >>> 30) & 1;
+            this.cpsr.c = (value >>> 29) & 1;
+            this.cpsr.v = (value >>> 28) & 1;
             this.log_apsr();
+        }
     }
     this.print_inst_mcrmrc(addr, inst, "mrc", t, cp);
 };
 
 CPU_ARMv7.prototype.mrs = function(inst, addr) {
     this.print_inst("MRS", inst, addr);
-    var read_spsr = bitops.get_bit(inst, 22);
-    var d = bitops.get_bits(inst, 15, 12);
-    if (d == 15)
-        this.abort_unpredictable_instruction("MRS", inst, addr);
+    var read_spsr = inst & (1 << 22);
+    var d = (inst >>> 12) & 0xf;
+
     if (read_spsr) {
         if (this.is_user_or_system())
             this.abort_unpredictable("MRS", inst, addr);
@@ -2926,14 +2709,12 @@ CPU_ARMv7.prototype.mrs = function(inst, addr) {
 
 CPU_ARMv7.prototype.msr_reg_sys = function(inst, addr) {
     this.print_inst("MSR (register) (system level)", inst, addr);
-    var r = bitops.get_bit(inst, 22);
-    var mask = bitops.get_bits(inst, 19, 16);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (mask === 0 || n == 15)
-        this.abort_unpredictable("MSR (register) (system level)", inst, addr);
-    if (r == 1) {
+    var r = inst & (1 << 22);
+    var mask = (inst >>> 16) & 0xf;
+    var n = inst & 0xf;
+
+    if (r) {
         // SPSRWriteByInstr(R[n], mask);
-        //this.abort_not_impl("SPSRWriteByInstr(R[n], mask);", inst, addr);
         this.spsr_write_by_instr(this.parse_psr(this.reg(n)), mask);
     } else {
         // CPSRWriteByInstr(R[n], mask, FALSE);
@@ -2944,26 +2725,21 @@ CPU_ARMv7.prototype.msr_reg_sys = function(inst, addr) {
 
 CPU_ARMv7.prototype.mul = function(inst, addr) {
     this.print_inst("MUL", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 19, 16);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("MUL", inst, addr);
+    var s = inst & 0x00100000;
+    var d = (inst >>> 16) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var ope1 = this.reg(n);
     var ope2 = this.reg(m);
-    //var ret = ope1 * ope2; 
-    //this.regs[d] = bitops.get_bits64(bitops.ret, 31, 0);
-    //this.regs[d] = bitops.toUint32(ret);
     var n64_ope1 = new Number64(0, ope1);
     var n64_ope2 = new Number64(0, ope2);
     var ret = n64_ope1.mul(n64_ope2);
     this.regs[d] = ret.low;
-    //this.log_value(ope1, "ope1");
-    //this.log_value(ope2, "ope2");
     if (s) {
-        this.cpsr.n = bitops.get_bit(ret.low, 31);
-        this.cpsr.z = ret.is_zero() ? 1 : 0;
+        //this.cpsr.n = bitops.get_bit(ret.low, 31);
+        this.cpsr.n = ret.low >>> 31;
+        this.cpsr.z = (ret === 0) ? 1 : 0;
         this.log_apsr();
     }
     this.print_inst_reg(addr, inst, "mul", s, d, n, m); // FIXME
@@ -2971,15 +2747,12 @@ CPU_ARMv7.prototype.mul = function(inst, addr) {
 
 CPU_ARMv7.prototype.mvn_reg = function(inst, addr) {
     this.print_inst("MVN (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1) {
-        // SUBS PC, LR and related instructions
-        this.abort_not_impl("MVN (register)", inst, addr);
-    }
+    var s = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift_c(valm, this.shift_t, this.shift_n, this.cpsr.c);
@@ -2996,16 +2769,13 @@ CPU_ARMv7.prototype.mvn_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.orr_reg = function(inst, addr) {
     this.print_inst("ORR (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1) {
-        // SUBS PC, LR and related instructions
-        this.abort_not_impl("ORR (register)", inst, addr);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -3025,8 +2795,7 @@ CPU_ARMv7.prototype.rev = function(inst, addr) {
     this.print_inst("REV", inst, addr);
     var d = bitops.get_bits(inst, 15, 12);
     var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && m == 15)
-        this.abort_unpredictable("REV", inst, addr);
+
     var valm = this.reg(m);
     var ret = 0;
     ret = bitops.set_bits(ret, 31, 24, bitops.get_bits(valm, 7, 0));
@@ -3039,17 +2808,13 @@ CPU_ARMv7.prototype.rev = function(inst, addr) {
 
 CPU_ARMv7.prototype.rsb_reg = function(inst, addr) {
     this.print_inst("RSB (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        throw "SEE SUBS PC, LR and related instructions;";
-    if (n == 13) {
-        this.sp_used("RSB (register)", inst);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -3067,21 +2832,15 @@ CPU_ARMv7.prototype.rsb_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.sbc_reg = function(inst, addr) {
     this.print_inst("SBC (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        // SEE SUBS PC, LR and related instructions;
-        this.abort_not_impl("SBC (register)", inst, addr);
-    if (n == 13) {
-        this.sp_used("SBC (register)", inst);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
-    // (shift_t, shift_n) = DecodeImmShift(type, imm5);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift(valm, this.shift_t, this.shift_n, this.cpsr.c);
     var ret = this.add_with_carry(valn, bitops.not(shifted), this.cpsr.c);
@@ -3097,12 +2856,11 @@ CPU_ARMv7.prototype.sbc_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.sbfx = function(inst, addr) {
     this.print_inst("SBFX", inst, addr);
-    var widthminus1 = bitops.get_bits(inst, 20, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var lsbit = bitops.get_bits(inst, 11, 7);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || n == 15)
-        this.abort_unpredictable("SBFX", inst, addr);
+    var widthminus1 = (inst >>> 16) & 0x1f;
+    var d = (inst >>> 12) & 0xf;
+    var lsbit = (inst >>> 7) & 0x1f;
+    var n = inst & 0xf;
+
     var msbit = lsbit + widthminus1;
     if (msbit <= 31)
         this.regs[d] = bitops.sign_extend(bitops.get_bits(this.reg(n), msbit, lsbit), msbit-lsbit+1, 32);
@@ -3113,15 +2871,12 @@ CPU_ARMv7.prototype.sbfx = function(inst, addr) {
 
 CPU_ARMv7.prototype.smlal = function(inst, addr) {
     this.print_inst("SMLAL", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var dhi = bitops.get_bits(inst, 19, 16);
-    var dlo = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (dlo == 15 || dhi == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("SMLAL", inst, addr);
-    if (dlo == dhi)
-        this.abort_unpredictable("SMLAL", inst, addr);
+    var s = inst & 0x00100000;
+    var dhi = (inst >>> 16) & 0xf;
+    var dlo = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var n64_n = new Number64(0, this.reg(n));
     var n64_m = new Number64(0, this.reg(m));
     var n64 = new Number64(this.reg(dhi), this.reg(dlo));
@@ -3138,15 +2893,12 @@ CPU_ARMv7.prototype.smlal = function(inst, addr) {
 
 CPU_ARMv7.prototype.smull = function(inst, addr) {
     this.print_inst("SMULL", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var dhi = bitops.get_bits(inst, 19, 16);
-    var dlo = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 11, 8);
-    var n = bitops.get_bits(inst, 3, 0);
-    if (dlo == 15 || dhi == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("SMULL", inst, addr);
-    if (dlo == dhi)
-        this.abort_unpredictable("SMULL", inst, addr);
+    var s = inst & 0x00100000;
+    var dhi = (inst >>> 16) & 0xf;
+    var dlo = (inst >>> 12) & 0xf;
+    var m = (inst >>> 8) & 0xf;
+    var n = inst & 0xf;
+
     var n64_n = new Number64(0, this.reg(n));
     var n64_m = new Number64(0, this.reg(m));
     var ret = n64_n.mul(n64_m);
@@ -3162,12 +2914,11 @@ CPU_ARMv7.prototype.smull = function(inst, addr) {
 
 CPU_ARMv7.prototype.strex = function(inst, addr) {
     this.print_inst("STREX", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var t = bitops.get_bits(inst, 3, 0);
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var t = inst & 0xf;
     var imm32 = 0;
-    if (d == 15 || t == 15 || n == 15)
-        this.abort_unpredictable("STREX", inst, addr);
+
     var address = this.reg(n) + imm32;
     // ExclusiveMonitorsPass(address,4)
     this.st_word(address, this.reg(t));
@@ -3178,21 +2929,15 @@ CPU_ARMv7.prototype.strex = function(inst, addr) {
 
 CPU_ARMv7.prototype.sub_reg = function(inst, addr) {
     this.print_inst("SUB (register)", inst, addr);
-    var s = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 && s == 1)
-        // SEE SUBS PC, LR and related instructions;
-        this.abort_not_impl("SUB (register)", inst, addr);
-    if (n == 13) {
-        this.sp_used("SUB (register)", inst);
-    }
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
-    // (shift_t, shift_n) = DecodeImmShift(type, imm5);
     this.decode_imm_shift(type, imm5);
     var shifted = this.shift(valm, this.shift_t, this.shift_n, this.cpsr.c);
     var ret = this.add_with_carry(valn, bitops.not(shifted), 1);
@@ -3208,43 +2953,35 @@ CPU_ARMv7.prototype.sub_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.sxth = function(inst, addr) {
     this.print_inst("SXTH", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    var rotation = bitops.get_bits(inst, 11, 10) << 3;
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("SXTH", inst, addr);
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+
     var rotated = this.ror(this.reg(m), rotation);
     this.regs[d] = bitops.sign_extend(bitops.get_bits64(rotated, 15, 0), 16, 32);
-    //this.log_value(this.reg(m), "regs[m]");
-    //this.log_value(rotated, "rotated");
     this.print_inst_reg(addr, inst, "sxth", null, d, null, m);
 };
 
 CPU_ARMv7.prototype.sxtah = function(inst, addr) {
     this.print_inst("SXTAH", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    var rotation = bitops.get_bits(inst, 11, 10) << 3;
-    if (n == 15)
-        this.abort_unpredictable("SXTAH", inst, addr);
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("SXTAH", inst, addr);
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
 
     var rotated = this.ror(this.reg(m), rotation);
     var n64 = new Number64(0, this.reg(n));
     this.regs[d] = n64.add(bitops.sign_extend(bitops.get_bits64(rotated, 15, 0), 16, 32)).low;
-    //this.log_value(this.reg(m), "regs[m]");
-    //this.log_value(rotated, "rotated");
     this.print_inst_reg(addr, inst, "sxtah", null, d, null, m);
 };
 
 CPU_ARMv7.prototype.teq_reg = function(inst, addr) {
     this.print_inst("TEQ (register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     this.decode_imm_shift(type, imm5);
@@ -3256,10 +2993,11 @@ CPU_ARMv7.prototype.teq_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.tst_reg = function(inst, addr) {
     this.print_inst("TST (register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var n = (inst >>> 16) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     this.decode_imm_shift(type, imm5);
     var valn = this.reg(n);
     var valm = this.reg(m);
@@ -3275,11 +3013,10 @@ CPU_ARMv7.prototype.ubfx = function(inst, addr) {
     var d = bitops.get_bits(inst, 15, 12);
     var lsbit = bitops.get_bits(inst, 11, 7);
     var n = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || n == 15)
-        this.abort_unpredictable("UBFX", inst, addr);
+
     var msbit = lsbit + widthminus1;
     if (msbit <= 31)
-        this.regs[d] = bitops.zero_extend(bitops.get_bits(this.reg(n), msbit, lsbit), 32);
+        this.regs[d] = bitops.get_bits(this.reg(n), msbit, lsbit);
     else
         this.abort_unpredictable("UBFX", inst, addr);
     this.print_inst_ubfx(addr, inst, "ubfx", d, n, lsbit, widthminus1 + 1);
@@ -3287,18 +3024,12 @@ CPU_ARMv7.prototype.ubfx = function(inst, addr) {
 
 CPU_ARMv7.prototype.umlal = function(inst, addr) {
     this.print_inst("UMLAL", inst, addr);
-    var s = bitops.get_bit(inst, 20);
+    var s = inst & 0x00100000;
     var dhi = bitops.get_bits(inst, 19, 16);
     var dlo = bitops.get_bits(inst, 15, 12);
     var m = bitops.get_bits(inst, 11, 8);
     var n = bitops.get_bits(inst, 3, 0);
-    if (dlo == 15 || dhi == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("UMLAL", inst, addr);
-    if (dlo == dhi)
-        this.abort_unpredictable("UMLAL", inst, addr);
-    //var ret = this.reg(n) * this.reg(m) + bitops.or(bitops.lsl(this.reg(dhi), 32), this.reg(dlo));
-    //this.regs[dhi] = bitops.get_bits64(ret, 63, 32);
-    //this.regs[dlo] = bitops.get_bits64(ret, 31, 0);
+    
     var n64_n = new Number64(0, this.reg(n));
     var n64_m = new Number64(0, this.reg(m));
     var n64_d = new Number64(this.reg(dhi), this.reg(dlo));
@@ -3315,18 +3046,12 @@ CPU_ARMv7.prototype.umlal = function(inst, addr) {
 
 CPU_ARMv7.prototype.umull = function(inst, addr) {
     this.print_inst("UMULL", inst, addr);
-    var s = bitops.get_bit(inst, 20);
+    var s = inst & 0x00100000;
     var dhi = bitops.get_bits(inst, 19, 16);
     var dlo = bitops.get_bits(inst, 15, 12);
     var m = bitops.get_bits(inst, 11, 8);
     var n = bitops.get_bits(inst, 3, 0);
-    if (dlo == 15 || dhi == 15 || m == 15 || n == 15)
-        this.abort_unpredictable("UMULL", inst, addr);
-    if (dlo == dhi)
-        this.abort_unpredictable("UMULL", inst, addr);
-    //var ret = this.reg(n) * this.reg(m); 
-    //this.regs[dhi] = bitops.get_bits64(ret, 63, 32);
-    //this.regs[dlo] = bitops.get_bits64(ret, 31, 0);
+
     var n64_n = new Number64(0, this.reg(n));
     var n64_m = new Number64(0, this.reg(m));
     var ret = n64_n.mul(n64_m);
@@ -3363,12 +3088,10 @@ CPU_ARMv7.prototype.usat = function(inst, addr) {
     var sh = bitops.get_bit(inst, 6);
     var n = bitops.get_bits(inst, 3, 0);
     this.decode_imm_shift(sh << 1, imm5);
-    if (d == 15 || n == 15)
-        this.abort_unpredictable("USAT", inst, addr);
 
     var operand = this.shift(this.reg(n), this.shift_t, this.shift_n, this.cpsr.c);
     var ret = this.unsigned_satq(this.sint32(operand), saturate_to);
-    this.regs[n] = this.zero_extend(ret);
+    this.regs[n] = ret;
     if (this.saturated)
         this.cpsr.q = 1;
     this.print_inst_unimpl(addr, inst, "usat");
@@ -3376,40 +3099,35 @@ CPU_ARMv7.prototype.usat = function(inst, addr) {
 
 CPU_ARMv7.prototype.uxtab = function(inst, addr) {
     this.print_inst("UXTAB", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var rotation = bitops.get_bits(inst, 11, 10) << 3;
-    var m = bitops.get_bits(inst, 3, 0);
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("UXTAB", inst, addr);
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+    var m = inst & 0xf;
+
     var rotated = this.ror(this.reg(m), rotation);
-    this.regs[d] = this.reg(n) + bitops.zero_extend(bitops.get_bits64(rotated, 7, 0), 32);
+    this.regs[d] = this.reg(n) + bitops.get_bits64(rotated, 7, 0);
     this.print_inst_uxtab(addr, inst, "uxtab", d, n, m, rotation);
 };
 
 CPU_ARMv7.prototype.uxtb = function(inst, addr) {
     this.print_inst("UXTB", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    var rotation = bitops.get_bits(inst, 11, 10) << 3;
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("UXTB", inst, addr);
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+
     var rotated = this.ror(this.reg(m), rotation);
-    this.regs[d] = bitops.zero_extend(bitops.get_bits64(rotated, 7, 0), 32);
+    this.regs[d] = bitops.get_bits64(rotated, 7, 0);
     this.print_inst_uxtab(addr, inst, "uxtb", d, null, m, rotation);
 };
 
 CPU_ARMv7.prototype.uxth = function(inst, addr) {
     this.print_inst("UXTH", inst, addr);
-    var d = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    var rotation = bitops.get_bits(inst, 11, 10) << 3;
-    if (d == 15 || m == 15)
-        this.abort_unpredictable("UXTH", inst, addr);
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+
     var rotated = this.ror(this.reg(m), rotation);
-    this.regs[d] = bitops.zero_extend(bitops.get_bits64(rotated, 15, 0), 32);
-    //this.log_value(this.reg(m), "regs[m]");
-    //this.log_value(rotated, "rotated");
+    this.regs[d] = bitops.get_bits64(rotated, 15, 0);
     this.print_inst_uxtab(addr, inst, "uxth", d, null, m, rotation);
 };
 
@@ -3418,16 +3136,14 @@ CPU_ARMv7.prototype.uxth = function(inst, addr) {
  */
 CPU_ARMv7.prototype.add_rsr = function(inst, addr) {
     this.print_inst("ADD (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("ADD (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = this.add_with_carry(this.reg(n), shifted, 0);
@@ -3443,16 +3159,14 @@ CPU_ARMv7.prototype.add_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.and_rsr = function(inst, addr) {
     this.print_inst("AND (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("AND (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.and(this.reg(n), shifted);
@@ -3464,16 +3178,14 @@ CPU_ARMv7.prototype.and_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.bic_rsr = function(inst, addr) {
     this.print_inst("BIC (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("BIC (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.and(this.reg(n), bitops.not(shifted));
@@ -3489,14 +3201,12 @@ CPU_ARMv7.prototype.bic_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.cmp_rsr = function(inst, addr) {
     this.print_inst("CMP (register-shifted register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var n = (inst >>> 16) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("CMP (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = this.add_with_carry(this.reg(n), bitops.not(shifted), 1);
@@ -3506,16 +3216,14 @@ CPU_ARMv7.prototype.cmp_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.eor_rsr = function(inst, addr) {
     this.print_inst("EOR (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("EOR (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.xor(this.reg(n), shifted);
@@ -3527,14 +3235,13 @@ CPU_ARMv7.prototype.eor_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.mvn_rsr = function(inst, addr) {
     this.print_inst("MVN (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var sf = inst & 0x00100000;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("MVN (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.not(shifted);
@@ -3546,16 +3253,14 @@ CPU_ARMv7.prototype.mvn_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.orr_rsr = function(inst, addr) {
     this.print_inst("ORR (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("ORR (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.or(this.reg(n), shifted);
@@ -3567,16 +3272,14 @@ CPU_ARMv7.prototype.orr_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.rsb_rsr = function(inst, addr) {
     this.print_inst("RSB (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("RSB (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = this.add_with_carry(bitops.not(this.reg(n)), shifted, 1);
@@ -3592,16 +3295,14 @@ CPU_ARMv7.prototype.rsb_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.sbc_rsr = function(inst, addr) {
     this.print_inst("SBC (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("SBC (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = this.add_with_carry(this.reg(n), bitops.not(shifted), this.cpsr.c);
@@ -3617,16 +3318,14 @@ CPU_ARMv7.prototype.sbc_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.sub_rsr = function(inst, addr) {
     this.print_inst("SUB (register-shifted register)", inst, addr);
-    var sf = bitops.get_bit(inst, 20);
-    var n = bitops.get_bits(inst, 19, 16);
-    var d = bitops.get_bits(inst, 15, 12);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var sf = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var s = (inst >>> 8) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (d == 15 || n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("SUB (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = this.add_with_carry(this.reg(n), bitops.not(shifted), 1);
@@ -3642,14 +3341,12 @@ CPU_ARMv7.prototype.sub_rsr = function(inst, addr) {
 
 CPU_ARMv7.prototype.tst_rsr = function(inst, addr) {
     this.print_inst("TST (register-shifted register)", inst, addr);
-    var n = bitops.get_bits(inst, 19, 16);
-    var s = bitops.get_bits(inst, 11, 8);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    // shift_t = DecodeRegShift(type);
+    var s = inst & 0x00100000;
+    var n = (inst >>> 16) & 0xf;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
+
     var shift_t = this.decode_reg_shift(type);
-    if (n == 15 || m == 15 || s == 15)
-        this.abort_unpredictable("TST (register-shifted register)", inst, addr);
     var shift_n = bitops.get_bits(this.reg(s), 7, 0);
     var shifted = this.shift_c(this.reg(m), shift_t, shift_n, this.cpsr.c);
     var ret = bitops.and(this.reg(n), shifted);
@@ -3662,25 +3359,18 @@ CPU_ARMv7.prototype.tst_rsr = function(inst, addr) {
  */
 CPU_ARMv7.prototype.ldrh_imm = function(inst, addr) {
     this.print_inst("LDRH (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (n == 15)
-        //this.abort_not_impl("LDRH (immediate)", inst, addr);
-        throw "LDRH (literal)";
-    if (p === 0 && w == 1)
-        //this.abort_not_impl("LDRH (immediate)", inst, addr);
-        throw "LDRHT";
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || (is_wback && n == t))
-        this.abort_unpredictable("LDRH (immediate)", inst, addr);
+
     var valn = this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
@@ -3688,32 +3378,23 @@ CPU_ARMv7.prototype.ldrh_imm = function(inst, addr) {
     var data = this.ld_halfword(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0)))
-        this.regs[t] = bitops.zero_extend(data, 32);
-    else // Can only apply before ARMv7
-        this.regs[t] = Number.NaN;
+    this.regs[t] = data;
     this.log_regs(null);
     this.print_inst_imm(addr, inst, "ldrh", null, t, n, imm32, true, is_wback, is_add);
 };
 
 CPU_ARMv7.prototype.ldrh_reg = function(inst, addr) {
     this.print_inst("LDRH (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        //this.abort_not_impl("LDRH (register)", inst, addr);
-        throw "LDRHT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("LDRH (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("LDRH (register)", inst, addr);
+
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.SRType_LSL, 0, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
@@ -3722,32 +3403,24 @@ CPU_ARMv7.prototype.ldrh_reg = function(inst, addr) {
     var data = this.ld_halfword(address);
     if (is_wback)
         this.regs[n] = offset_addr;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0)))
-        this.regs[t] = bitops.zero_extend(data, 32);
-    else // Can only apply before ARMv7
-        this.regs[t] = Number.NaN;
+    this.regs[t] = data;
     this.print_inst_reg(addr, inst, "ldrh", null, t, n, m, this.SRType_LSL, 0, true, is_wback, is_add);
 };
 
 CPU_ARMv7.prototype.ldrsb_imm = function(inst, addr) {
     this.print_inst("LDRSB (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (n == 15)
-        throw "SEE LDRSB (literal)";
-    if (p === 0 && w == 1)
-        throw "LDRSBT";
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || (is_wback && n == t))
-        this.abort_unpredictable("LDRSB (immediate)", inst, addr);
+
     var valn = this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
@@ -3760,21 +3433,15 @@ CPU_ARMv7.prototype.ldrsb_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldrsb_reg = function(inst, addr) {
     this.print_inst("LDRSB (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE LDRSBT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("LDRSB (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("LDRSB (register)", inst, addr);
 
     var offset = this.shift(this.reg(m), this.SRType_LSL, 0, this.cpsr.c);
     var valn = this.reg(n);
@@ -3789,36 +3456,26 @@ CPU_ARMv7.prototype.ldrsb_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.str_reg = function(inst, addr) {
     this.print_inst("STR (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE STRT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
+
     this.decode_imm_shift(type, imm5);
-    if (m == 15)
-        this.abort_unpredictable("STR (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STR (register)", inst, addr);
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
     var address = is_index ? offset_addr : valn;
     address = bitops.get_bits64(address, 31, 0); // XXX
     var data = this.reg(t);
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0)))
-        this.st_word(address, data);
-    else {
-        // Can only apply before ARMv7
-        this.st_word(address, undefined);
-    }
+    this.st_word(address, data);
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_reg(addr, inst, "str", null, t, n, m, this.shift_t, this.shift_n, true, is_wback);
@@ -3826,14 +3483,11 @@ CPU_ARMv7.prototype.str_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.strbt_a1 = function(inst, addr) {
     this.print_inst("STRBT A1", inst, addr);
-    var u = bitops.get_bit(inst, 23);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm12 = bitops.get_bits(inst, 11, 0);
-    var imm32 = bitops.zero_extend(imm12, 32);
+    var u = inst & (1 << 23);
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm32 = inst & 0xfff;
     var is_add = u == 1;
-    if (t == 15 || n == 15 || n == t)
-        this.abort_unpredictable("STRBT A1", inst, addr);
 
     var valn = this.reg(n);
     var offset = imm32;
@@ -3845,16 +3499,14 @@ CPU_ARMv7.prototype.strbt_a1 = function(inst, addr) {
 
 CPU_ARMv7.prototype.strbt_a2 = function(inst, addr) {
     this.print_inst("STRBT A2", inst, addr);
-    var u = bitops.get_bit(inst, 23);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
+    var u = (inst >>> 23) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
     var is_add = u == 1;
     this.decode_imm_shift(type, imm5);
-    if (t == 15 || n == 15 || n == t || m == 15)
-        this.abort_unpredictable("STRBT A2", inst, addr);
 
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
@@ -3866,24 +3518,19 @@ CPU_ARMv7.prototype.strbt_a2 = function(inst, addr) {
 
 CPU_ARMv7.prototype.strb_reg = function(inst, addr) {
     this.print_inst("STRB (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm5 = bitops.get_bits(inst, 11, 7);
-    var type = bitops.get_bits(inst, 6, 5);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "SEE STRBT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm5 = (inst >>> 7) & 0x1f;
+    var type = (inst >>> 5) & 3;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
+
     this.decode_imm_shift(type, imm5);
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("STRB (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STRB (register)", inst, addr);
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.shift_t, this.shift_n, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
@@ -3896,24 +3543,17 @@ CPU_ARMv7.prototype.strb_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.strd_reg = function(inst, addr) {
     this.print_inst("STRD (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (bitops.get_bit(t, 0))
-        this.abort_undefined("STRD (register)", inst, addr);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var t2 = t + 1;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (p === 0 && w == 1)
-        this.abort_unpredictable("STRD (register) 1", inst, addr);
-    if (t2 == 15 || m == 15)
-        this.abort_unpredictable("STRD (register) 2", inst, addr);
-    //if (is_wback && (n == 15 || n == t || n == t2))
-    //    this.abort_unpredictable("STRD (register) 3", inst, addr); // Manual wrong??
+
     var valn = this.reg(n);
     var valm = this.reg(m);
     var offset_addr = valn + (is_add ? valm : -valm);
@@ -3927,26 +3567,19 @@ CPU_ARMv7.prototype.strd_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.strd_imm = function(inst, addr) {
     this.print_inst("STRD (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (bitops.get_bit(t, 0) == 1)
-        this.abort_undefined_instruction("STRD (immediate)", inst, addr);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
     var t2 = t + 1;
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (p === 0 && w == 1)
-        this.abort_unpredictable("STRD (immediate)", inst, addr);
-    if (is_wback && (n == 15 || n == t || n == t2))
-        this.abort_unpredictable("STRD (immediate)", inst, addr);
-    if (t2 == 15)
-        this.abort_unpredictable("STRD (immediate)", inst, addr);
+
     var valn = this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
@@ -3959,33 +3592,22 @@ CPU_ARMv7.prototype.strd_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.strh_imm = function(inst, addr) {
     this.print_inst("STRH (immediate)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var imm4h = bitops.get_bits(inst, 11, 8);
-    var imm4l = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        //this.abort_not_impl("STRH (immediate)", inst, addr);
-        throw "STRHT";
-    var imm32 = bitops.zero_extend((imm4h << 4) + imm4l, 32);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm4h = (inst >>> 8) & 0xf;
+    var imm4l = inst & 0xf;
+    var imm32 = (imm4h << 4) + imm4l;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15)
-        this.abort_unpredictable("STRH (immediate)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STRH (immediate)", inst, addr);
+
     var valn = this.reg(n);
     var offset_addr = valn + (is_add ? imm32 : -imm32);
     var address = is_index ? offset_addr : valn;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0)))
-        this.st_halfword(address, bitops.get_bits(this.reg(t), 15, 0));
-    else {
-        // Can only apply before ARMv7
-        this.st_halfword(address, undefined);
-    }
+    this.st_halfword(address, bitops.get_bits(this.reg(t), 15, 0));
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_imm(addr, inst, "strh", null, t, n, imm32, true, is_wback, is_add);
@@ -3993,33 +3615,21 @@ CPU_ARMv7.prototype.strh_imm = function(inst, addr) {
 
 CPU_ARMv7.prototype.strh_reg = function(inst, addr) {
     this.print_inst("STRH (register)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var t = bitops.get_bits(inst, 15, 12);
-    var m = bitops.get_bits(inst, 3, 0);
-    if (p === 0 && w == 1)
-        throw "STRHT";
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
     var is_index = p == 1;
     var is_add = u == 1;
     var is_wback = p === 0 || w == 1;
-    if (t == 15 || m == 15)
-        this.abort_unpredictable("STRH (register)", inst, addr);
-    if (is_wback && (n == 15 || n == t))
-        this.abort_unpredictable("STRH (register)", inst, addr);
+
     var valn = this.reg(n);
     var offset = this.shift(this.reg(m), this.SRType_LSL, 0, this.cpsr.c);
     var offset_addr = valn + (is_add ? offset : -offset);
-    //this.log_value(offset, "offset");
-    assert(offset_addr > 0, "offset_addr > 0: " + offset_addr.toString());
     var address = is_index ? offset_addr : valn;
-    if (this.unaligned_support() || (address = bitops.clear_bits(address, 0)))
-        this.st_halfword(address, bitops.get_bits(this.reg(t), 15, 0));
-    else {
-        // Can only apply before ARMv7
-        this.st_halfword(address, undefined);
-    }
+    this.st_halfword(address, bitops.get_bits(this.reg(t), 15, 0));
     if (is_wback)
         this.regs[n] = offset_addr;
     this.print_inst_reg(addr, inst, "strh", null, t, n, m, this.SRType_LSL, 0, true, is_wback, is_add);
@@ -4027,42 +3637,33 @@ CPU_ARMv7.prototype.strh_reg = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldm = function(inst, addr) {
     this.print_inst("LDM / LDMIA / LDMFD", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
     var is_pop = false;
     if (w && n == 13 && n_registers >= 2) {
         is_pop = true;
-        this.pop_used("LDM / LDMIA / LDMFD", register_list);
-    } else {
-        if (n == 15 || n_registers < 1)
-            this.abort_unpredictable("LDM / LDMIA / LDMFD", inst, addr);
     }
     var is_wback = w == 1;
+
     var valn = this.reg(n);
     var address = valn;
-    //this.log_value(n, "n");
-    //this.log_value(address, "address");
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             this.regs[i] = this.ld_word(address);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    //if ((register_list >>> 15) & 1) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.branch_to = this.ld_word(address);
     }
-    if (is_wback) {
-        if (bitops.get_bit(register_list, n)) {
-            this.regs[n] = Number.NaN;
-        } else {
-            this.regs[n] = this.reg(n) + 4 * n_registers;
-        }
-    }
+    if (is_wback)
+        this.regs[n] = this.reg(n) + 4 * n_registers;
     this.log_regs(null);
     if (is_pop)
         this.print_inst_ldstm(addr, inst, "pop", is_wback, null, reglist);
@@ -4072,17 +3673,15 @@ CPU_ARMv7.prototype.ldm = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldm_er = function(inst, addr) {
     this.print_inst("LDM (exception return)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 14, 0);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0x7fff;
     var n_registers = bitops.bit_count(register_list, 15);
     var is_wback = w == 1;
     var is_increment = u == 1;
     var is_wordhigher = p == u;
-    if (n == 15)
-        this.abort_unpredictable("LDM (exception return)", inst, addr);
 
     var valn = this.reg(n);
     if (this.is_user_or_system())
@@ -4091,26 +3690,18 @@ CPU_ARMv7.prototype.ldm_er = function(inst, addr) {
     var address = valn + (is_increment ? 0 : -length);
     if (is_wordhigher)
         address += 4;
-    //this.log_value(n, "n");
-    //this.log_value(address, "address");
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             this.regs[i] = this.ld_word(address);
             address += 4;
         }
     }
-    logger.log(reglist.toString());
     var new_pc = this.ld_word(address);
 
-    if (is_wback) {
-        if (bitops.get_bit(register_list, n)) {
-            this.regs[n] = Number.NaN;
-        } else {
-            this.regs[n] = valn + (is_increment ? length : -length);
-        }
-    }
+    if (is_wback)
+        this.regs[n] = valn + (is_increment ? length : -length);
     this.log_regs(null);
     this.cpsr_write_by_instr(this.get_current_spsr(), 15, true);
     this.branch_to = new_pc;
@@ -4120,15 +3711,14 @@ CPU_ARMv7.prototype.ldm_er = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldm_ur = function(inst, addr) {
     this.print_inst("LDM (user registers)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 14, 0);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0x7fff;
     var n_registers = bitops.bit_count(register_list, 15);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("LDM (user registers)", inst, addr);
     var is_increment = u == 1;
     var is_wordhigher = p == u;
+
     var valn = this.reg(n);
     if (this.is_user_or_system())
         this.abort_unpredictable("LDM (user registers)", inst, addr);
@@ -4136,12 +3726,10 @@ CPU_ARMv7.prototype.ldm_ur = function(inst, addr) {
     var address = valn + (is_increment ? 0 : -length);
     if (is_wordhigher)
         address += 4;
-    //this.log_value(n, "n");
-    //this.log_value(address, "address");
     var reglist = [];
     this.log_regs(null);
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             // FIXME
             this.regs_usr[i] = this.ld_word(address);
@@ -4161,125 +3749,100 @@ CPU_ARMv7.prototype.ldm_ur = function(inst, addr) {
 
 CPU_ARMv7.prototype.ldmda = function(inst, addr) {
     this.print_inst("LDMDA / LDMFA", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("LDMDA / LDMFA", inst, addr);
 
     var address = this.reg(n) - 4 * n_registers + 4;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             this.regs[i] = this.ld_word(address);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.branch_to = this.ld_word(address);
     }
-    if (w) {
-        if (bitops.get_bit(register_list, n)) {
-            this.regs[n] = Number.NaN;
-        } else {
-            this.regs[n] = this.reg(n) - 4 * n_registers;
-        }
-    }
+    if (w)
+        this.regs[n] = this.reg(n) - 4 * n_registers;
     this.log_regs(null);
     this.print_inst_ldstm(addr, inst, "ldmda", w, n, reglist);
 };
 
 CPU_ARMv7.prototype.ldmdb = function(inst, addr) {
     this.print_inst("LDMDB / LDMEA", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("LDMDB / LDMEA", inst, addr);
+
     var address = this.reg(n) - 4 * n_registers;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             this.regs[i] = this.ld_word(address);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.branch_to = this.ld_word(address);
     }
-    if (w) {
-        if (bitops.get_bit(register_list, n)) {
-            this.regs[n] = Number.NaN;
-        } else {
-            this.regs[n] = this.reg(n) - 4 * n_registers;
-        }
-    }
+    if (w)
+        this.regs[n] = this.reg(n) - 4 * n_registers;
     this.log_regs(null);
     this.print_inst_ldstm(addr, inst, "ldmdb", w, n, reglist);
 };
 
 CPU_ARMv7.prototype.ldmib = function(inst, addr) {
     this.print_inst("LDMIB / LDMED", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("LDMIB / LDMED", inst, addr);
+
     var address = this.reg(n) + 4;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             this.regs[i] = this.ld_word(address);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.branch_to = this.ld_word(address);
     }
-    if (w) {
-        if (bitops.get_bit(register_list, n)) {
-            this.regs[n] = Number.NaN;
-        } else {
-            this.regs[n] = this.reg(n) + 4 * n_registers;
-        }
-    }
+    if (w)
+        this.regs[n] = this.reg(n) + 4 * n_registers;
     this.log_regs(null);
     this.print_inst_ldstm(addr, inst, "ldmib", w, n, reglist);
 };
 
 CPU_ARMv7.prototype.stm = function(inst, addr) {
     this.print_inst("STM / STMIA / STMEA", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    var lowest_set_bit = bitops.lowest_set_bit(register_list, 16);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("STM / STMIA / STMEA", inst, addr);
+
     this.log_regs(null);
     var address = this.reg(n);
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
-            if (i == n && w && i != lowest_set_bit) {
-                this.regs[i] = Number.NaN;
-            } else {
-                this.st_word(address, this.regs[i]);
-            }
+            this.st_word(address, this.regs[i]);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.st_word(address, this.get_pc());
     }
@@ -4290,35 +3853,27 @@ CPU_ARMv7.prototype.stm = function(inst, addr) {
 
 CPU_ARMv7.prototype.stmdb = function(inst, addr) {
     this.print_inst("STMDB / STMFD", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    var lowest_set_bit = bitops.lowest_set_bit(register_list, 16);
     var is_push = false;
     var valn = this.reg(n);
     if (w && n == 13 && n_registers >= 2) {
-        this.push_used("STMDB / STMFD", register_list);
         is_push = true;
-    } else {
-        if (n == 15 || n_registers < 1)
-            this.abort_unpredictable("STMDB / STMFD", inst, addr);
     }
+
     this.log_regs(null);
     var address = valn - 4 * n_registers;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
-            if ((is_push && i == 13 && i != lowest_set_bit) || (!is_push && i == n && w && i != lowest_set_bit)) {
-                this.regs[i] = Number.NaN;
-            } else {
-                this.st_word(address, this.regs[i]);
-            }
+            this.st_word(address, this.regs[i]);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.st_word(address, this.get_pc());
     }
@@ -4332,29 +3887,22 @@ CPU_ARMv7.prototype.stmdb = function(inst, addr) {
 
 CPU_ARMv7.prototype.stmib = function(inst, addr) {
     this.print_inst("STMIB / STMFA", inst, addr);
-    var w = bitops.get_bit(inst, 21);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var w = (inst >>> 21) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
-    var lowest_set_bit = bitops.lowest_set_bit(register_list, 16);
     var valn = this.reg(n);
-    if (n == 15 || n_registers < 1)
-        this.abort_unpredictable("STMIB / STMFA", inst, addr);
     this.log_regs(null);
     var address = valn + 4;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
-            if (i == n && w && i != lowest_set_bit) {
-                this.regs[i] = Number.NaN;
-            } else {
-                this.st_word(address, this.regs[i]);
-            }
+            this.st_word(address, this.regs[i]);
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         this.st_word(address, this.get_pc());
     }
@@ -4365,10 +3913,10 @@ CPU_ARMv7.prototype.stmib = function(inst, addr) {
 
 CPU_ARMv7.prototype.stm_ur = function(inst, addr) {
     this.print_inst("STM (user registers)", inst, addr);
-    var p = bitops.get_bit(inst, 24);
-    var u = bitops.get_bit(inst, 23);
-    var n = bitops.get_bits(inst, 19, 16);
-    var register_list = bitops.get_bits(inst, 15, 0);
+    var p = (inst >>> 24) & 1;
+    var u = (inst >>> 23) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var register_list = inst & 0xffff;
     var n_registers = bitops.bit_count(register_list, 16);
     var is_increment = u == 1;
     var is_wordhigher = p == u;
@@ -4384,7 +3932,7 @@ CPU_ARMv7.prototype.stm_ur = function(inst, addr) {
         address += 4;
     var reglist = [];
     for (var i=0; i < 15; i++) {
-        if (bitops.get_bit(register_list, i)) {
+        if ((register_list >>> i) & 1) {
             reglist.push(i);
             // XXX
             if (this.cpsr.m == this.FIQ_MODE) {
@@ -4401,7 +3949,7 @@ CPU_ARMv7.prototype.stm_ur = function(inst, addr) {
             address += 4;
         }
     }
-    if (bitops.get_bit(register_list, 15)) {
+    if (register_list & 0x8000) {
         reglist.push(15);
         //this.st_word(address, this.regs_usr[15] + 8);
         this.st_word(address, this.get_pc());
@@ -4411,17 +3959,15 @@ CPU_ARMv7.prototype.stm_ur = function(inst, addr) {
 
 CPU_ARMv7.prototype.cps = function(inst, addr) {
     this.print_inst("CPS", inst, addr);
-    var imod = bitops.get_bits(inst, 19, 18);
-    var m = bitops.get_bit(inst, 17);
-    var a = bitops.get_bit(inst, 8);
-    var i = bitops.get_bit(inst, 7);
-    var f = bitops.get_bit(inst, 6);
-    var mode = bitops.get_bits(inst, 4, 0);
+    var imod = (inst >>> 18) & 3;
+    var m = inst & (1 << 17);
+    var a = inst & (1 << 8);
+    var i = inst & (1 << 7);
+    var f = inst & (1 << 6);
+    var mode = inst & 0xf;
     var enable = imod == 2;
     var disable = imod == 3;
-    var changemode = m == 1;
-    if ((imod === 0 && m === 0) || imod == 1)
-        this.abort_unpredictable("CPS", inst, addr);
+
     if (this.is_priviledged()) {
         var new_cpsr = this.clone_psr(this.cpsr);
         if (enable) {
@@ -4434,7 +3980,7 @@ CPU_ARMv7.prototype.cps = function(inst, addr) {
             if (i) new_cpsr.i = 1;
             if (f) new_cpsr.f = 1;
         }
-        if (changemode)
+        if (m)
             new_cpsr.m = mode;
         this.cpsr_write_by_instr(new_cpsr, 15, true);
     }
@@ -4443,8 +3989,7 @@ CPU_ARMv7.prototype.cps = function(inst, addr) {
 
 CPU_ARMv7.prototype.svc = function(inst, addr) {
     this.print_inst("SVC (previously SWI)", inst, addr);
-    var imm24 = bitops.get_bits(inst, 23, 0);
-    var imm32 = bitops.zero_extend(imm24, 32); // Ignored
+    var imm32 = inst & 0x00ffffff;
     this.print_inst_svc(inst, imm32);
     this.call_supervisor();
 };
@@ -4496,10 +4041,7 @@ CPU_ARMv7.prototype.vmrs = function(inst_name, inst, addr) {
 
 CPU_ARMv7.prototype.exec = function(inst_name, inst, addr) {
     this.current = inst_name;
-    if (this[inst_name])
-        this[inst_name](inst, addr);
-    else
-        throw "Unknown instruction: " + inst_name;
+    return this[inst_name](inst, addr);
 };
 
 /*
@@ -4514,16 +4056,15 @@ CPU_ARMv7.prototype.decode_uncond = function(inst, addr) {
     var op2 = 0;
     var tmp = 0;
 
-    op1 = bitops.get_bits(inst, 27, 20);
+    op1 = (inst >>> 20) & 0xff;
     if ((op1 >> 7) === 0) {
         // [31:27]=11110
         // Miscellaneous instructions, memory hints, and Advanced SIMD instructions
-        //op1 = op1 & ~(1<<7); // [26:20]
-        op1 = bitops.get_bits(inst, 26, 20);
-        op = bitops.get_bit(inst, 16);
-        op2 = bitops.get_bits(inst, 7, 4);
+        op1 = (inst >>> 20) & 0x7f;
+        op = (inst >>> 16) & 1;
+        op2 = (inst >>> 4) & 0xf;
 
-        tmp = bitops.get_bits(op1, 6, 5);
+        tmp = (op1 >>> 5) & 3;
         switch (tmp) {
             case 0:
                 if (op1 == 0x10 && (op2 & 2) === 0) {
@@ -4639,7 +4180,7 @@ CPU_ARMv7.prototype.decode_uncond = function(inst, addr) {
                 this.abort_not_impl("MRRC, MRRC2", inst, addr);
                 break;
             default:
-                tmp = bitops.get_bits(op1, 7, 5);
+                tmp = (op1 >>> 5) & 7;
                 switch (tmp) {
                     case 4:
                         if (op1 & 4) {
@@ -4707,7 +4248,7 @@ CPU_ARMv7.prototype.decode_uncond = function(inst, addr) {
 CPU_ARMv7.prototype.decode_sync_prim = function(inst, addr) {
     // Synchronization primitives
     // [27:24]=0001 [7:4]=1001
-    var op = bitops.get_bits(inst, 23, 20);
+    var op = (inst >>> 20) & 0xf;
 
     if ((op & 8) === 0) {
         if ((op & 3) === 0) {
@@ -4761,7 +4302,7 @@ CPU_ARMv7.prototype.decode_sync_prim = function(inst, addr) {
 CPU_ARMv7.prototype.decode_dataproc_imm = function(inst, addr) {
     // [27:25]=001
     // Data-processing (immediate)
-    var op = bitops.get_bits(inst, 24, 20);
+    var op = (inst >>> 20) & 0x1f;
     var rn;
     switch (op >> 1) {
         case 0:
@@ -4773,7 +4314,7 @@ CPU_ARMv7.prototype.decode_dataproc_imm = function(inst, addr) {
             return "eor_imm";
             break;
         case 2:
-            rn = bitops.get_bits(inst, 19, 16);
+            rn = (inst >>> 16) & 0xf;
             if (rn == 0xf) {
                 // [24:21]=0010
                 // ADR A2
@@ -4788,7 +4329,7 @@ CPU_ARMv7.prototype.decode_dataproc_imm = function(inst, addr) {
             return "rsb_imm";
             break;
         case 4:
-            rn = bitops.get_bits(inst, 19, 16);
+            rn = (inst >>> 16) & 0xf;
             if (rn == 0xf) {
                 // [24:21]=0100
                 // ADR A1
@@ -4864,9 +4405,9 @@ CPU_ARMv7.prototype.decode_dataproc_imm = function(inst, addr) {
 CPU_ARMv7.prototype.decode_msr_imm_and_hints = function(inst, addr) {
     // [27:23]=00110 [21:20]=10
     // MSR (immediate), and hints
-    var op = bitops.get_bit(inst, 22);
-    var op1 = bitops.get_bits(inst, 19, 16);
-    var op2 = bitops.get_bits(inst, 7, 0);
+    var op = inst & (1 << 22);
+    var op1 = (inst >>> 16) & 0xf;
+    var op2 = inst & 0xff;
     if (op) {
         // MSR (immediate) (system level)
         return "msr_imm_sys";
@@ -4933,9 +4474,9 @@ CPU_ARMv7.prototype.decode_half_mul = function(inst, addr) {
 CPU_ARMv7.prototype.decode_misc = function(inst, addr) {
     // [27:23]=00010 [20]=0 [7]=0
     // Miscellaneous instructions
-    var op = bitops.get_bits(inst, 22, 21);
-    var op1 = bitops.get_bits(inst, 19, 16);
-    var op2 = bitops.get_bits(inst, 6, 4);
+    var op = (inst >>> 21) & 0x3;
+    var op1 = (inst >>> 16) & 0xf;
+    var op2 = (inst >>> 4) & 0x7;
     switch (op2) {
         case 0:
             if (op & 1) {
@@ -5010,9 +4551,9 @@ CPU_ARMv7.prototype.decode_misc = function(inst, addr) {
 CPU_ARMv7.prototype.decode_dataproc_reg = function(inst, addr) {
     // [27:25]=000 [4]=0
     // Data-processing (register)
-    var op1 = bitops.get_bits(inst, 24, 20);
-    var op2 = bitops.get_bits(inst, 11, 7);
-    var op3 = bitops.get_bits(inst, 6, 5);
+    var op1 = (inst >>> 20) & 0x1f;
+    var op2 = (inst >>> 7) & 0x1f;
+    var op3 = (inst >>> 5) & 0x3;
     // op1 != 0b10xx0
     switch (op1 >> 1) {
         case 0:
@@ -5129,8 +4670,8 @@ CPU_ARMv7.prototype.decode_dataproc_reg = function(inst, addr) {
 CPU_ARMv7.prototype.decode_dataproc_rsr = function(inst, addr) {
     // [27:25]=000 [7]=0 [4]=1
     // Data-processing (register-shifted register)
-    var op1 = bitops.get_bits(inst, 24, 20);
-    var op2 = bitops.get_bits(inst, 6, 5);
+    var op1 = (inst >>> 20) & 0x1f;
+    var op2 = (inst >>> 5) & 0x3;
     // op1 != 0b10xx0
     switch (op1 >> 1) {
         case 0:
@@ -5239,7 +4780,6 @@ CPU_ARMv7.prototype.decode_extra_ldst_unpriv1 = function(inst, addr) {
     // [7:4]=1011
     // Extra load/store instructions (unprivileged) #1
     op = bitops.get_bit(inst, 20);
-    //op2 = bitops.get_bits(inst, 6, 5);
     //op2=01
     //if ((op2 & 3) === 0) {
     //    this.abort_unknown_inst(inst, addr);
@@ -5292,12 +4832,12 @@ CPU_ARMv7.prototype.decode_extra_ldst1 = function(inst, addr) {
     // [27:25]=000 [7]=1 [4]=1
     // [7:4]=1011
     // Extra load/store instructions #1
-    op1 = bitops.get_bits(inst, 24, 20);
+    op1 = (inst >>> 20) & 0x1f;
     //op2 = bitops.get_bits(inst, 6, 5);
     //op2=01
     if (op1 & 1) {
         if (op1 & 4) {
-            rn = bitops.get_bits(inst, 19, 16);
+            rn = (inst >>> 16) & 0xf;
             if (rn == 0xf) {
                 // LDRH (literal)
                 this.abort_not_impl("LDRH (literal)", inst, addr);
@@ -5326,14 +4866,13 @@ CPU_ARMv7.prototype.decode_extra_ldst2 = function(inst, addr) {
     // [27:25]=000 [7]=1 [4]=1
     // [7:4]=11x1
     // Extra load/store instructions #2
-    var op1 = bitops.get_bits(inst, 24, 20);
-    var op2 = bitops.get_bits(inst, 6, 5);
+    var op1 = (inst >>> 20) & 0x1f;
+    var op2 = (inst >>> 5) & 0x3;
     //op2=1x
-    var rn = bitops.get_bits(inst, 19, 16);
+    var rn = (inst >>> 16) & 0xf;
     if (op2 & 1) {
         if (op1 & 1) {
             if (op1 & 4) {
-                rn = bitops.get_bits(inst, 19, 16);
                 if (rn == 0xf) {
                     // LDRSH (literal)
                     this.abort_not_impl("LDRSH (literal)", inst, addr);
@@ -5357,7 +4896,6 @@ CPU_ARMv7.prototype.decode_extra_ldst2 = function(inst, addr) {
     } else {
         if (op1 & 1) {
             if (op1 & 4) {
-                rn = bitops.get_bits(inst, 19, 16);
                 if (rn == 0xf) {
                     // LDRSB (literal)
                     this.abort_not_impl("LDRSB (literal)", inst, addr);
@@ -5371,7 +4909,6 @@ CPU_ARMv7.prototype.decode_extra_ldst2 = function(inst, addr) {
             }
         } else {
             if (op1 & 4) {
-                rn = bitops.get_bits(inst, 19, 16);
                 if (rn == 0xf) {
                     // LDRD (literal)
                     this.abort_not_impl("LDRD (literal)", inst, addr);
@@ -5393,7 +4930,7 @@ CPU_ARMv7.prototype.decode_multi = function(inst, addr) {
     // [27:24]=0000 [7:4]=1001
     // Multiply and multiply-accumulate
 
-    var op = bitops.get_bits(inst, 23, 20);
+    var op = (inst >>> 20) & 0xf;
     switch (op >> 1) {
         case 0:
             // MUL
@@ -5446,13 +4983,14 @@ CPU_ARMv7.prototype.decode_multi = function(inst, addr) {
 
 CPU_ARMv7.prototype.decode_datamisc = function(inst, addr) {
     // Data-processing and miscellaneous instructions
-    var op = bitops.get_bit(inst, 25);
-    var op1 = bitops.get_bits(inst, 24, 20);
-    var op2 = bitops.get_bits(inst, 7, 4);
+    var op = (inst >>> 25) & 1;
+    var op1 = (inst >>> 20) & 0x1f;
+    var op2 = (inst >>> 4) & 0xf;
     var rn = null;
 
     if (op) {
-        if ((op1 >> 3) == 2 && (op1 & 3) == 2) { // 10x10
+        //if ((op1 >> 3) == 2 && (op1 & 3) == 2) { // 10x10
+        if (op1 == 0x12 || op1 == 0x16) { // 10x10
             return this.decode_msr_imm_and_hints(inst, addr);
         } else {
             switch (op1) {
@@ -5537,8 +5075,8 @@ CPU_ARMv7.prototype.decode_datamisc = function(inst, addr) {
 CPU_ARMv7.prototype.decode_media = function(inst, addr) {
     // [27:25]=011 [4]=1
     // Media instructions
-    var op1 = bitops.get_bits(inst, 24, 20);
-    var op2 = bitops.get_bits(inst, 7, 5);
+    var op1 = (inst >>> 20) & 0x1f;
+    var op2 = (inst >>> 5) & 0x7;
     var tmp = op1 >> 3;
     var rn = null;
     var a = null;
@@ -5754,8 +5292,8 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
         case 1:
             // [27:23]=01101 [4]=1
             // Packing, unpacking, saturation, and reversal
-            op1 = bitops.get_bits(inst, 22, 20);
-            op2 = bitops.get_bits(inst, 7, 5);
+            op1 = (inst >>> 20) & 0x7;
+            op2 = (inst >>> 5) & 0x7;
             tmp = op1 >> 1;
             switch (tmp) {
                 case 0:
@@ -5817,7 +5355,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                                         return "rev";
                                         break;
                                     case 3:
-                                        a = bitops.get_bits(inst, 19, 16);
+                                        a = (inst >>> 16) & 0xf;
                                         if (a == 0xf) {
                                                 // SXTH
                                                 return "sxth";
@@ -5867,7 +5405,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                                         this.abort_not_impl("USAT16", inst, addr);
                                         break;
                                     case 3:
-                                        a = bitops.get_bits(inst, 19, 16);
+                                        a = (inst >>> 16) & 0xf;
                                         if (a == 0xf) {
                                                 // UXTB
                                                 return "uxtb";
@@ -5888,7 +5426,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                                         this.abort_not_impl("RBIT", inst, addr);
                                         break;
                                     case 3:
-                                        a = bitops.get_bits(inst, 19, 16);
+                                        a = (inst >>> 16) & 0xf;
                                         if (a == 0xf) {
                                                 // UXTH
                                                 return "uxth";
@@ -5922,9 +5460,9 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
         case 2:
             // [27:23]=01110 [4]=1
             // Signed multiplies
-            op1 = bitops.get_bits(inst, 22, 20);
-            op2 = bitops.get_bits(inst, 7, 5);
-            a = bitops.get_bits(inst, 15, 12);
+            op1 = (inst >>> 20) & 0x7;
+            op2 = (inst >>> 5) & 0x7;
+            a = (inst >>> 12) & 0xf;
             switch (op1) {
                 case 0:
                     switch (op2 >> 1) {
@@ -6020,7 +5558,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                     break;
                 case 2:
                     if ((op2 & 3) === 0) {
-                        rn = bitops.get_bits(inst, 3, 0);
+                        rn = inst & 0xf;
                         if (rn == 0xf) {
                             // BFC
                             return "bfc";
@@ -6057,8 +5595,8 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
      *  bit[4]: op
      */
     var cond = inst >>> 28;
-    var op = bitops.get_bit(inst, 4);
-    var op1 = bitops.get_bits(inst, 27, 25);
+    var op = (inst >>> 4) & 1;
+    var op1 = (inst >>> 25) & 7;
     var op2 = null;
     var tmp = null;
     var rn = null;
@@ -6090,11 +5628,11 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                     } else {
                         // [27:25]=011 [4]=0
                         // Load/store word and unsigned byte #2
-                        op1 = bitops.get_bits(inst, 24, 20);
+                        op1 = (inst >>> 20) & 0x1f;
                         // A=1 B=0
                         if (op1 & 1) {
                             if (op1 & 4) { // xx1x1
-                                if ((op1 >> 4) === 0 && (op1 & 7) == 7) { // 0x111
+                                if (op1 == 7 || op1 == 15) { // 0x111
                                     // LDRBT
                                     this.abort_not_impl("LDRBT", inst, addr);
                                 } else {
@@ -6102,7 +5640,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                                     return "ldrb_reg";
                                 }
                             } else { // xx0x1
-                                if ((op1 >> 4) === 0 && (op1 & 7) == 3) { // 0x011
+                                if (op1 == 3 || op1 == 11) { // 0x011
                                     // LDRT
                                     this.abort_not_impl("LDRT", inst, addr);
                                 } else {
@@ -6112,7 +5650,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                             }
                         } else {
                             if (op1 & 4) { // xx1x0
-                                if ((op1 >> 4) === 0 && (op1 & 7) == 6) { // 0x110
+                                if (op1 == 6 || op1 == 14) { // 0x110
                                     // STRBT A2
                                     return "strbt_a2";
                                 } else {
@@ -6120,7 +5658,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                                     return "strb_reg";
                                 }
                             } else { // xx0x0
-                                if ((op1 >> 4) === 0 && (op1 & 7) == 4) { // 0x010
+                                if (op1 == 2 || op1 == 10) { // 0x010
                                     // STRT
                                     this.abort_not_impl("STRT", inst, addr);
                                 } else {
@@ -6133,15 +5671,15 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                 } else {
                     // [27:25]=010 [4]=x
                     // Load/store word and unsigned byte #1
-                    op1 = bitops.get_bits(inst, 24, 20);
+                    op1 = (inst >>> 20) & 0x1f;
                     // A=0 B=x
                     if (op1 & 1) {
                         if (op1 & 4) { // xx1x1
-                            if ((op1 >> 4) === 0 && (op1 & 7) == 7) { // 0x111
+                            if (op1 == 7 || op1 == 15) { // 0x111
                                 // LDRBT
                                 this.abort_not_impl("LDRBT", inst, addr);
                             } else {
-                                rn = bitops.get_bits(inst, 19, 16);
+                                rn = (inst >>> 16) & 0xf;
                                 if (rn == 0xf) {
                                     // LDRB (literal)
                                     this.abort_not_impl("LDRB (literal)", inst, addr);
@@ -6152,11 +5690,11 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                             }
                             //break;
                         } else { // xx0x1
-                            if ((op1 >> 4) === 0 && (op1 & 7) == 3) { // 0x011
+                            if (op1 == 3 || op1 == 0xb) { // 0x011
                                 // LDRT
                                 this.abort_not_impl("LDRT", inst, addr);
                             } else {
-                                rn = bitops.get_bits(inst, 19, 16);
+                                rn = (inst >>> 16) & 0xf;
                                 if (rn == 0xf) {
                                     // LDR (literal)
                                     return "ldr_lit";
@@ -6168,7 +5706,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                         }
                     } else {
                         if (op1 & 4) { // xx1x0
-                            if ((op1 >> 4) === 0 && (op1 & 7) == 6) { // 0x110
+                            if (op1 == 6 || op1 == 14) { // 0x110
                                 // STRBT A1
                                 return "strbt_a1";
                             } else {
@@ -6176,7 +5714,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                                 return "strb_imm";
                             }
                         } else { // xx0x0
-                            if ((op1 >> 4) === 0 && (op1 & 7) == 4) { // 0x010
+                            if (op1 == 2 || op1 == 10) { // 0x010
                                 // STRT
                                 this.abort_not_impl("STRT", inst, addr);
                             } else {
@@ -6190,7 +5728,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
             case 2:
                 // [27:26]=10
                 // Branch, branch with link, and block data transfer
-                op = bitops.get_bits(inst, 25, 20);
+                op = (inst >>> 20) & 0x3f;
                 if (op & 0x20) {
                     if (op & 0x10) {
                         // BL, BLX (immediate)
@@ -6203,7 +5741,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                 } else {
                     if (op & 4) {
                         if (op & 1) {
-                            var r = bitops.get_bit(inst, 15);
+                            var r = (inst >>> 15) & 1;
                             if (r) {
                                 // LDM (exception return)
                                 return "ldm_er";
@@ -6267,14 +5805,14 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
             case 3:
                 // [27:26]=11
                 // System call, and coprocessor instructions
-                op1 = bitops.get_bits(inst, 25, 20);
-                op = bitops.get_bit(inst, 4);
+                op1 = (inst >>> 20) & 0x3f;
+                op = (inst >>> 4) & 1;
                 if (op1 & 0x20) {
                     if (op1 & 0x10) {
                         // SVC (previously SWI)
                         return "svc";
                     } else {
-                        coproc = bitops.get_bits(inst, 11, 8);
+                        coproc = (inst >>> 8) & 0xf;
                         if (op) {
                             if ((coproc >> 1) == 5) { // 0b101x
                                 // Advanced SIMD, VFP
@@ -6419,14 +5957,56 @@ function CPU_ARM_MMU(cpu, memctlr) {
     this.baseaddr0 = 0;
     this.baseaddr1 = 0;
     this.memctlr = memctlr;
-    this.tlb = [];
+    this.tlbs = new Array();
+    this.tlbs[0] = new Object();
+    this.current = this.tlbs[0];
+    this.asid = 0;
     this.width = 0;
+    this.mask = (1 << (31 - this.width - 20 + 1)) - 1;
     this.cp15 = null;
     this.check_unaligned = false;
+    this.tlb_hit_section = 0;
+    this.tlb_hit_smallpage = 0;
 }
+
+CPU_ARM_MMU.prototype.flush_tlb = function(asid, mva) {
+    if (asid != null && asid != undefined) {
+        if (mva) {
+            this.tlbs[asid][mva] = null;
+        } else {
+            this.tlbs[asid] = [];
+        }
+    } else {
+        if (mva) {
+            //display.log(mva.toString(16));
+            for (var i in this.tlbs)
+                this.tlbs[i][mva] = null;
+        } else {
+            for (var i in this.tlbs)
+                this.tlbs[i] = [];
+        }
+    }
+    this.current = this.tlbs[this.asid];
+};
 
 CPU_ARM_MMU.prototype.trans_to_phyaddr = function(vaddr, is_write) {
     if (this.enabled) {
+        // TLB
+        var tmp;
+        if (this.current[vaddr >>> 20]) {// Section
+            this.tlb_hit_section += 1;
+            tmp = this.current[vaddr >>> 20] << 20;
+            if (tmp >= 0x100000000)
+                tmp -= 0x100000000;
+            return (vaddr & 0x000fffff) + tmp;
+        }
+        if (this.current[vaddr >>> 12]) {// Small Page
+            this.tlb_hit_smallpage += 1;
+            tmp = this.current[vaddr >>> 12] << 12;
+            if (tmp >= 0x100000000)
+                tmp -= 0x100000000;
+            return (vaddr & 0x00000fff) + tmp;
+        }
         return this.walk_table(vaddr, is_write);
     } else {
         return vaddr;
@@ -6441,7 +6021,7 @@ CPU_ARM_MMU.prototype.ld_word = function(addr) {
 };
 
 CPU_ARM_MMU.prototype.get_1st_ptaddr = function(vaddr) {
-    var index = bitops.get_bits(vaddr, 31 - this.width, 20);
+    var index = (vaddr >>> 20) & this.mask;
     var ptaddr;
     if (this.width) {
         var is_zero = bitops.get_bits(vaddr, 31, 32 - this.width) === 0;
@@ -6449,16 +6029,18 @@ CPU_ARM_MMU.prototype.get_1st_ptaddr = function(vaddr) {
             ptaddr = bitops.set_bits(this.baseaddr0, 13 - this.width, 2, index);
         else
             ptaddr = bitops.set_bits(this.baseaddr1, 13, 2, index);
+        return bitops.clear_bits(ptaddr, 1, 0);
     } else {
-        ptaddr = bitops.set_bits(this.baseaddr0, 13 - this.width, 2, index);
+        return this.baseaddr0 + (index << 2);
     }
-    return bitops.clear_bits(ptaddr, 1, 0);
 };
 
 CPU_ARM_MMU.prototype.get_2nd_ptaddr = function(vaddr, table) {
-    var index = bitops.get_bits(vaddr, 19, 12);
-    var ptaddr = bitops.set_bits(table, 9, 2, index);
-    return bitops.clear_bits(ptaddr, 1, 0);
+    var index = (vaddr >>> 12) & 0xff;
+    var tmp = table & 0xfffffc00;
+    if (tmp < 0)
+        tmp += 0x100000000;
+    return tmp + (index << 2);
 };
 
 CPU_ARM_MMU.prototype.check_permission = function(vaddr, ap2, ap10, is_write, is_section) {
@@ -6478,7 +6060,6 @@ CPU_ARM_MMU.prototype.check_permission = function(vaddr, ap2, ap10, is_write, is
                 break;
             case 3:
                 if (is_write) {
-                    //throw "Permission Fault: ap2 == 1, ap10 == 3";
                     if (is_section)
                         this.cp15.set_memory_abort(vaddr, this.cp15.PERMISSION_FAULT_SECTION, is_write);
                     else
@@ -6493,7 +6074,6 @@ CPU_ARM_MMU.prototype.check_permission = function(vaddr, ap2, ap10, is_write, is
     } else {
         switch (ap10) {
             case 0:
-                //throw "Permission Fault: ap2 == 0, ap10 == 0";
                 if (is_section)
                     this.cp15.set_memory_abort(vaddr, this.cp15.PERMISSION_FAULT_SECTION, is_write);
                 else
@@ -6518,14 +6098,14 @@ CPU_ARM_MMU.prototype.check_permission = function(vaddr, ap2, ap10, is_write, is
 };
 
 CPU_ARM_MMU.prototype.check_permission_table1 = function(vaddr, table, is_write) {
-    var ap2 = bitops.get_bit(table, 15);
-    var ap10 = bitops.get_bits(table, 11, 10);
+    var ap2 = (table >>> 15) & 1;
+    var ap10 = (table >>> 10) & 3;
     this.check_permission(vaddr, ap2, ap10, is_write, true);
 };
 
 CPU_ARM_MMU.prototype.check_permission_table2 = function(vaddr, table, is_write) {
-    var ap2 = bitops.get_bit(table, 9);
-    var ap10 = bitops.get_bits(table, 5, 4);
+    var ap2 = (table >>> 9) & 1;
+    var ap10 = (table >>> 4) & 3;
     this.check_permission(vaddr, ap2, ap10, is_write, false);
 };
 
@@ -6534,7 +6114,7 @@ CPU_ARM_MMU.prototype.need_perm_check = function(table, is_supersection) {
     if (is_supersection)
         domain = this.cp15.domains[0];
     else
-        domain = this.cp15.domains[bitops.get_bits(table, 8, 5)];
+        domain = this.cp15.domains[(table >>> 5) & 0xf];
     switch (domain) {
         case 0:
             throw "Domain Fault";
@@ -6557,15 +6137,14 @@ CPU_ARM_MMU.prototype.need_perm_check = function(table, is_supersection) {
 
 CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
     var paddr;
-    if (vaddr in this.tlb)
-        return this.tlb[vaddr];
+
     var ptaddr1 = this.get_1st_ptaddr(vaddr);
     /*
      * First-level descriptors
      */
     var table1 = this.ld_word(ptaddr1);
 
-    var format = bitops.get_bits(table1, 1, 0);
+    var format = table1 & 3;
     switch (format) {
         case 0:
             //throw "Translation fault (1st 0): " + vaddr.toString(16);
@@ -6576,7 +6155,7 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
             // Small Pages or Large Pages. See the below.
             break;
         case 2:
-            is_supersection = bitops.get_bit(table1, 18);
+            var is_supersection = (table1 >>> 18) & 1;
             if (is_supersection) {
                 // Supersection
                 if (this.need_perm_check(table1, true))
@@ -6586,11 +6165,13 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
                 // Section
                 if (this.need_perm_check(table1))
                     this.check_permission_table1(vaddr, table1, is_write);
-                paddr = bitops.copy_bits(table1, 19, 0, vaddr);
+                var tmp = table1 & 0xfff00000;
+                if (tmp < 0)
+                    tmp += 0x100000000;
+                paddr = tmp + (vaddr & 0x000fffff);
             }
-            this.tlb[vaddr] = paddr;
+            this.current[vaddr >>> 20] = paddr >>> 20;
             return paddr;
-            //break;
         case 3:
             throw "Translation fault (1st 3): " + vaddr.toString(16);
             break;
@@ -6606,10 +6187,9 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
 
     if (this.need_perm_check(table1)) // table1 is correct
         this.check_permission_table2(vaddr, table2, is_write);
-    var format2 = bitops.get_bits(table2, 1, 0);
+    var format2 = table2 & 3;
     switch (format2) {
         case 0:
-            //throw "Translation fault (2nd 0): table1=" + toStringHex32(table1) + ", table2=" + toStringHex32(table2) + ", vaddr=" + vaddr.toString(16);
             this.cp15.set_memory_abort(vaddr, this.cp15.TRANS_FAULT_PAGE);
             throw "PF";
             break;
@@ -6624,8 +6204,11 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
             throw "Unknown format: " + format2.toString();
             break;
     }
-    paddr = bitops.copy_bits(table2, 11, 0, vaddr);
-    this.tlb[vaddr] = paddr;
+    var tmp2 = table2 & 0xfffff000;
+    if (tmp2 < 0)
+        tmp2 += 0x100000000;
+    paddr = tmp2 + (vaddr & 0x00000fff);
+    this.current[vaddr >>> 12] = paddr >>> 12;
     return paddr;
 };
 
@@ -6738,14 +6321,6 @@ CPU_ARM_MMU.prototype.show_current_tables = function() {
             break;
     }
     var str = "";
-    /*
-    var offset = 0;
-    while (size >= 0) {
-        str += this.show_table(this.baseaddr0 + offset) + "\n"; // TODO
-        size -= 4;
-        offset += 4;
-    }
-    */
     var addr;
     for (addr=0xc0000000; addr < 0xc1000000; addr += 0x10000)
         str += this.show_table(addr) + "\n";
@@ -6768,13 +6343,18 @@ CPU_ARM_MMU.prototype.restore = function(params) {
     this.baseaddr0 = params.baseaddr0;
     this.baseaddr1 = params.baseaddr1;
     this.width = params.width;
+    this.mask = (1 << (31 - this.width - 20 + 1)) - 1;
 };
 
 CPU_ARM_MMU.prototype.dump = function() {
     var msg = "";
-    msg += "baseaddr0: " + toStringHex32(this.baseaddr0) + ", ";
-    msg += "baseaddr1: " + toStringHex32(this.baseaddr1) + ", ";
-    msg += "width: " + this.width;
+    msg += "baseaddr0: " + toStringHex32(this.baseaddr0) + "\n";
+    msg += "baseaddr1: " + toStringHex32(this.baseaddr1) + "\n";
+    msg += "width: " + this.width + "\n";
+    msg += "TLB Hit(Section): " + this.tlb_hit_section + "\n";
+    msg += "TLB Hit(Small Page): " + this.tlb_hit_smallpage + "\n";
+    for (var i in this.tlbs)
+        msg += "TLB[ASID=" + i + "]: " + this.tlbs[i].length + "\n";
     display.log(msg);
 };
 
@@ -6804,9 +6384,11 @@ CPU_ARM_MMU.prototype.dump_virmem = function(addr) {
 /*
  * CP15 System Control Coprocessor
  */
-function CPU_ARM_CP15(cpu) {
-    this.interrupt_vector_address = 0;
+function CPU_ARM_CP15(options, cpu) {
+    this.options = options;
     this.cpu = cpu;
+
+    this.interrupt_vector_address = 0;
 
     // [31:24]=Implementor [23:20]=Variant [19:16]=Architecture [15:4]=Primary part number [3:0]=Revision
     // MRC p15,0,<Rd>,c0,c0,0 ; Read CP15 Main ID Register
@@ -7009,10 +6591,12 @@ function CPU_ARM_CP15(cpu) {
     this.regs_w[this.CSSELR] = function (word) {cp15.regs[cp15.CSSELR] = word;};
 
     this.regs_w[this.TTBCR] = function (word) {
+        display.log("TTBCR");
         cp15.regs[cp15.TTBCR] = word;
         var width = bitops.get_bits(word, 2, 0);
         var ttbr0 = cp15.regs[cp15.TTBR0];
         mmu.width = width;
+        mmu.mask = (1 << (31 - width - 20 + 1)) - 1;
         mmu.baseaddr0 = bitops.clear_bits(ttbr0, 13 - width, 0);
         cp15.log_value(word, "word");
         cp15.log_value(mmu.baseaddr0, "baseaddr0 in ttbcr");
@@ -7023,25 +6607,24 @@ function CPU_ARM_CP15(cpu) {
             cp15.log_value(word, "word");
             cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbcr");
         }
-        mmu.tlb = []; // XXX
+        mmu.flush_tlb();
+        display.log("TTBCR called.");
     };
     this.regs_w[this.SCTLR] = function (word) {
         cp15.regs[cp15.SCTLR] = word;
-        if (bitops.get_bit(word, 0)) {
+        if (word & 1) {
             mmu.enabled = true;
-            //throw "MMU enabled!";
         } else {
             mmu.enabled = false;
-            //throw "MMU disabled!";
         }
-        if (!bitops.get_bit(word, 24)) { // SCTLR.VE
-            if (bitops.get_bit(word, 13)) { // SCTLR.V
+        if (!(word & 0x01000000)) { // SCTLR.VE[24]
+            if (word & 0x00002000) { // SCTLR.V[13]
                 cp15.interrupt_vector_address = 0xffff0000;
             } else {
                 cp15.interrupt_vector_address = 0x00000000;
             }
         }
-        if (bitops.get_bit(word, 1)) {// SCTLR.A
+        if (word & 2) {// SCTLR.A[1]
             mmu.check_unaligned = true;
             throw "Check unaligned access!";
         } else {
@@ -7057,23 +6640,25 @@ function CPU_ARM_CP15(cpu) {
     };
 
     this.regs_w[this.TTBR0] = function (word) {
+        display.log("TTBR0");
         cp15.regs[cp15.TTBR0] = word;
-        //var width = bitops.get_bits(cp15.regs[cp15.TTBCR], 2, 0);
         var ttbr0 = word;
         mmu.baseaddr0 = bitops.clear_bits(ttbr0, 13 - mmu.width, 0);
-        cp15.log_value(word, "ttbr0");
-        cp15.log_value(mmu.baseaddr0, "baseaddr0 in ttbr0");
-        //mmu.tlb = []; // XXX
+        if (cp15.options.enable_logger) {
+            cp15.log_value(word, "ttbr0");
+            cp15.log_value(mmu.baseaddr0, "baseaddr0 in ttbr0");
+        }
     };
 
     this.regs_w[this.TTBR1] = function (word) {
+        display.log("TTBR1");
         cp15.regs[cp15.TTBR1] = word;
         var ttbr1 = word;
         mmu.baseaddr1 = bitops.clear_bits(ttbr1, 13, 0);
-        cp15.log_value(word, "ttbr1");
-        cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbr1");
-        //throw "TTBR1";
-        //mmu.tlb = []; // XXX
+        if (cp15.options.enable_logger) {
+            cp15.log_value(word, "ttbr1");
+            cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbr1");
+        }
     };
 
     /*
@@ -7147,50 +6732,54 @@ function CPU_ARM_CP15(cpu) {
     this.regs_w[this.DCCIMVAC] = function (word) {logger.log("DCCIMVAC called.");}; // Clean and invalidate data cache line by MVA to PoU
 
     this.ITLBIALL  = [8, 0, 5, 0];
-    this.ITLBMVA   = [8, 0, 5, 1];
+    this.ITLBIMVA   = [8, 0, 5, 1];
     this.ITLBIASID = [8, 0, 5, 2];
-    this.ITLBIALL  = [8, 0, 6, 0];
-    this.ITLBMVA   = [8, 0, 6, 1];
-    this.ITLBIASID = [8, 0, 6, 2];
-    this.ITLBIALL  = [8, 0, 7, 0];
-    this.ITLBMVA   = [8, 0, 7, 1];
-    this.ITLBIASID = [8, 0, 7, 2];
+    this.DTLBIALL  = [8, 0, 6, 0];
+    this.DTLBIMVA   = [8, 0, 6, 1];
+    this.DTLBIASID = [8, 0, 6, 2];
+    this.UTLBIALL  = [8, 0, 7, 0];
+    this.UTLBIMVA   = [8, 0, 7, 1];
+    this.UTLBIASID = [8, 0, 7, 2];
 
     this.regs_w[this.ITLBIALL] = function (word) {
-        logger.log("ITLBIALL called."); // invalidate instruction TLB
-        mmu.tlb = [];
+        //display.log("ITLBIALL: " + word.toString(16)); // invalidate instruction TLB
+        mmu.flush_tlb();
     };
-    this.regs_w[this.ITLBMVA] = function (word) {
-        logger.log("ITLBMVA called."); // invalidate instruction TLB entry by MVA
-        mmu.tlb = [];
-    };
-    this.regs_w[this.ITLBIASID] = function (word) {
-        logger.log("ITLBIASID called."); // invalidate instruction TLB by ASID match
-        mmu.tlb = [];
-    };
-    this.regs_w[this.ITLBIALL] = function (word) {
-        logger.log("DTLBIALL called."); // invalidate data TLB
-        mmu.tlb = [];
-    };
-    this.regs_w[this.ITLBMVA] = function (word) {
-        logger.log("DTLBMVA called."); // invalidate data TLB entry by MVA
-        mmu.tlb = [];
+    this.regs_w[this.ITLBIMVA] = function (word) {
+        //display.log("ITLBIMVA: " + word.toString(16)); // invalidate instruction TLB entry by MVA
+        mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
     };
     this.regs_w[this.ITLBIASID] = function (word) {
-        logger.log("DTLBIASID called."); // invalidate data TLB by ASID match
-        mmu.tlb = [];
+        //display.log("ITLBIASID: " + word.toString(16)); // invalidate instruction TLB by ASID match
+        mmu.flush_tlb(bitops.get_bits(word, 7, 0));
+    };
+    this.regs_w[this.DTLBIALL] = function (word) {
+        //display.log("DTLBIALL: " + word.toString(16)); // invalidate data TLB
+        mmu.flush_tlb(); // FIXME
+    };
+    this.regs_w[this.DTLBIMVA] = function (word) {
+        //display.log("DTLBIMVA: " + word.toString(16)); // invalidate data TLB entry by MVA
+        mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
+    };
+    this.regs_w[this.DTLBIASID] = function (word) {
+        //display.log("DTLBIASID: " + word.toString(16)); // invalidate data TLB by ASID match
+        mmu.flush_tlb(bitops.get_bits(word, 7, 0));
     };
     this.regs_w[this.UTLBIALL] = function (word) {
-        logger.log("UTLBIALL called."); // invalidate unified TLB
-        mmu.tlb = [];
+        //display.log("UTLBIALL: " + word.toString(16)); // invalidate unified TLB
+        mmu.flush_tlb(); // FIXME
     };
-    this.regs_w[this.UTLBMVA] = function (word) {
-        logger.log("UTLBMVA called."); // invalidate unified TLB entry by MVA
-        mmu.tlb = [];
+    this.regs_w[this.UTLBIMVA] = function (word) {
+        //display.log("UTLBIMVA: " + word.toString(16)); // invalidate unified TLB entry by MVA
+        // FIXME
+        //mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
+        mmu.flush_tlb();
+        //mmu.flush_tlb(null, bitops.get_bits(word, 31, 12));
     };
     this.regs_w[this.UTLBIASID] = function (word) {
-        logger.log("UTLBIASID called."); // invalidate unified TLB by ASID match
-        mmu.tlb = [];
+        //display.log("UTLBIASID: " + word.toString(16)); // invalidate unified TLB by ASID match
+        //mmu.flush_tlb(bitops.get_bits(word, 7, 0));
+        mmu.flush_tlb(word & 0xff);
     };
 
     this.PRRR = [10, 0, 2, 0]; // c10, Primary Region Remap Register (PRRR)
@@ -7212,13 +6801,15 @@ function CPU_ARM_CP15(cpu) {
     this.regs[this.CONTEXTIDR] = 0;
     this.regs_w[this.CONTEXTIDR] = function (word) {
         // FIXME
-        var procid = bitops.get_bits(word, 31, 8);
-        var asid = bitops.get_bits(word, 7, 0);
-        var old_asid = bitops.get_bits(cp15.regs[cp15.CONTEXTIDR], 7, 0);
-        display.log("PROCID=" + procid + ", ASID=" + asid + ", ASID(old)=" + old_asid);
+        var procid = (word >>> 8) & 0x00ffffff;
+        var asid = word & 0xff;
+        var old_asid = cp15.regs[cp15.CONTEXTIDR] & 0xff;
+        //display.log("PROCID=" + procid + ", ASID=" + asid + ", ASID(old)=" + old_asid);
         // FIXME
-        if (asid != old_asid)
-            mmu.tlb = [];
+        mmu.asid = asid;
+        if (!mmu.tlbs[mmu.asid])
+            mmu.tlbs[mmu.asid] = new Object();
+        mmu.current = mmu.tlbs[mmu.asid];
         cp15.regs[cp15.CONTEXTIDR] = word;
     };
 
@@ -7321,7 +6912,7 @@ CPU_ARM_CP15.prototype.dump_reg = function(name) {
 
 CPU_ARM_CP15.prototype.sctlr_get_nmfi = function() {
     var sctlr = this.regs[this["SCTLR"]];
-    return bitops.get_bit(sctlr, 27);
+    return (sctlr >>> 27) & 1;
 };
 
 CPU_ARM_CP15.prototype.dump_sctlr = function() {
@@ -7382,6 +6973,9 @@ CPU_ARM_CP15.prototype.dump_value = function(value, name) {
 };
 
 CPU_ARM_CP15.prototype.log_value = function(value, name) {
+    if (!this.options.enable_logger)
+        return;
+
     this.output_value(logger, value, name);
 };
 
@@ -7393,12 +6987,10 @@ CPU_ARM_CP15.prototype.output_value = function(target, value, name) {
 };
 
 CPU_ARM_CP15.prototype.send_word = function(inst, word) {
-    var opc1 = bitops.get_bits(inst, 23, 21);
-    var crn = bitops.get_bits(inst, 19, 16); // the major register specifier
-    var opc2 = bitops.get_bits(inst, 7, 5);
-    var crm = bitops.get_bits(inst, 3, 0);
-    this.dump_inst(inst);
-    this.log_value(word);
+    var opc1 = (inst >>> 21) & 0x7;
+    var crn = (inst >>> 16) & 0xf; // the major register specifier
+    var opc2 = (inst >>> 5) & 0x7;
+    var crm = inst & 0xf;
     var func = this.regs_w[[crn, opc1, crm, opc2]];
     if (func)
         func(word);
@@ -7407,11 +6999,11 @@ CPU_ARM_CP15.prototype.send_word = function(inst, word) {
 };
 
 CPU_ARM_CP15.prototype.get_word = function(inst) {
-    var opc1 = bitops.get_bits(inst, 23, 21);
-    var crn = bitops.get_bits(inst, 19, 16); // the major register specifier
-    var opc2 = bitops.get_bits(inst, 7, 5);
-    var crm = bitops.get_bits(inst, 3, 0);
-    this.dump_inst(inst);
+    var opc1 = (inst >>> 21) & 0x7;
+    var crn = (inst >>> 16) & 0xf; // the major register specifier
+    var opc2 = (inst >>> 5) & 0x7;
+    var crm = inst & 0xf;
+    //this.dump_inst(inst);
     var ret = this.regs[[crn, opc1, crm, opc2]];
     if (ret !== undefined)
         this.log_value(ret);
@@ -7423,11 +7015,10 @@ CPU_ARM_CP15.prototype.get_word = function(inst) {
 CPU_ARM_CP15.prototype.set_memory_abort = function(vaddr, status, is_write) {
     this.regs[this.DFAR] = vaddr;
     this.regs[this.IFAR] = vaddr; // XXX
-    var dfsr = 0;
-    dfsr = bitops.set_bit(dfsr, 11, is_write ? 1 : 0);
+    var dfsr = is_write ? (1 << 11) : 0;
     // This bit is for hardware error, so we can ignore it.
     //dfsr = bitops.set_bit(dfsr, 10, is_write);
-    dfsr = bitops.set_bits(dfsr, 3, 0, status);
+    dfsr = dfsr + status;
     this.regs[this.DFSR] = dfsr;
     this.regs[this.IFSR] = dfsr; // XXX
 };

@@ -24,6 +24,7 @@ function Options() {
     this.update_current_function = false;
     this.suppress_interrupts = false;
     this.show_act_on_viraddr = Number.NaN;
+    this.enable_instruction_counting = false;
 
     this.option_strings = [
         'enable_stopper',
@@ -45,6 +46,7 @@ function Options() {
         'update_current_function',
         'suppress_interrupts',
         'show_act_on_viraddr',
+        'enable_instruction_counting',
     ];
     this.hex_values = {
         'stop_address': true,
@@ -106,6 +108,7 @@ Options.prototype.reflect = function() {
     this.reflect_input_number('show_act_on_viraddr');
     if (Symbols[this.show_act_on_viraddr])
         $('#show_act_on_symbol').val(Symbols[this.show_act_on_viraddr]);
+    this.reflect_checkbox('enable_instruction_counting');
 };
 
 Options.prototype.register_checkbox_handler = function(name, childs) {
@@ -173,6 +176,7 @@ Options.prototype.register_handlers = function() {
     this.register_checkbox_handler('update_current_function');
     this.register_checkbox_handler('suppress_interrupts');
     this.register_symaddr_handler('show_act_on_viraddr', 'show_act_on_symbol');
+    this.register_checkbox_handler('enable_instruction_counting');
 };
 
 Options.prototype.dump = function(target) {

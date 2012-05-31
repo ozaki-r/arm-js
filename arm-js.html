@@ -199,6 +199,29 @@ $(document).ready(function() {
     $("#dump_io").click(function() {
         system.dump_io();
     });
+    $("#show_counted_instructions").click(function() {
+        var reversed = new Array();
+        for (var name in system.inst_counter) {
+            if (!reversed[system.inst_counter[name]])
+                reversed[system.inst_counter[name]] = new Array();
+            reversed[system.inst_counter[name]].push(name);
+        }
+        var sorted = new Array(system.inst_counter.length);
+        for (var name in system.inst_counter) {
+            sorted.push(system.inst_counter[name]);
+        }
+        sorted.sort(function(a, b) { return b - a; });
+        var output = "";
+        var done = new Array();
+        for (var i in sorted) {
+            if (done[sorted[i]])
+                continue;
+            output += sorted[i] + ": " + reversed[sorted[i]].join(", ") + "\n";
+            done[sorted[i]] = true;
+        }
+        display.wipe();
+        display.log(output);
+    });
 
     term.open();
     options.read_saved_values(display);
@@ -272,6 +295,7 @@ $(function() {
     <button id="show_branch_traces" class="button" type="button">Show branch traces</button>
     <button id="dump" class="button" type="button">Show states</button>
     <button id="show_options" class="button" type="button">Show options</button>
+    <button id="show_counted_instructions" class="button" type="button">Show counted instructions</button>
     <button id="test" class="button" type="button">Test</button>
     <button id="test_terminal" class="button" type="button">Test terminal</button>
     <br />
@@ -336,6 +360,7 @@ $(function() {
       </legend>
       <ul style="list-style-type: none;">
         <li><label><input type=checkbox id=suppress_interrupts>Suppress interrupts</label></li>
+        <li><label><input type=checkbox id=enable_instruction_counting>Enable instruction counting</label></li>
       </ul>
     </fieldset>
     <button id="save_options" type="button">Save</button>

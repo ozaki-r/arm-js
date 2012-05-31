@@ -373,24 +373,21 @@ function GenericInterruptController() {
     // Interrupt Acknowledge Register (ICCIAR)
     this.ICCIAR = 0x1e00010c;
     this.read[this.ICCIAR] = function() {
-        var ret = 0;
         if (gic.sent_irqs.length === 0) {
             // There is no pending IRQ
-            ret = bitops.set_bits(ret, 9, 0, 1023);
-            return ret;
+            return 1023;
         }
         var irq = gic.sent_irqs[0];
         //display.log("irq=" + irq);
-        ret = bitops.set_bits(ret, 9, 0, irq);
-        return ret;
+        return irq;
     };
 
     // End of Interrupt Register (ICCEOIR)
     this.ICCEOIR = 0x1e000110;
     this.write[this.ICCEOIR] = function(word) {
-        var eoi = bitops.get_bits(word, 9, 0);
         if (gic.sent_irqs.length === 0)
             return;
+        var eoi = word & 0x3ff;
         if (gic.sent_irqs[0] == eoi)
             gic.sent_irqs.shift();
         else
@@ -849,7 +846,7 @@ function UART(id, baseaddr, irq, gic) {
         uart.output_char(str);
     };
     this.read[this.DR] = function() {
-        logger.log(uart.name + ": read DR");
+        //logger.log(uart.name + ": read DR");
         if (uart.rx_fifo.length > 0)
             return uart.rx_fifo.shift().charCodeAt(0);
         else
@@ -858,73 +855,79 @@ function UART(id, baseaddr, irq, gic) {
 
     this.read[this.FR] = function() {
         var ret = 0;
-        ret = bitops.set_bit(ret, 7, (uart.tx_fifo.length === 0 ? 1 : 0));
-        ret = bitops.set_bit(ret, 6, (uart.rx_fifo.length >= uart.fifo_length ? 1 : 0));
+        //ret = bitops.set_bit(ret, 7, (uart.tx_fifo.length === 0 ? 1 : 0));
+        if (uart.tx_fifo.length === 0)
+            ret += (1 << 7);
+        //ret = bitops.set_bit(ret, 6, (uart.rx_fifo.length >= uart.fifo_length ? 1 : 0));
+        if (uart.rx_fifo.length >= uart.fifo_length)
+            ret += (1 << 6);
         //ret = bitops.set_bit(ret, 5, (uart.tx_fifo.length >= uart.fifo_length ? 1 : 0));
-        ret = bitops.set_bit(ret, 4, (uart.rx_fifo.length === 0 ? 1 : 0));
-        logger.log("UART: read FR: " + ret.toString(16));
+        //ret = bitops.set_bit(ret, 4, (uart.rx_fifo.length === 0 ? 1 : 0));
+        if (uart.rx_fifo.length === 0)
+            ret += (1 << 4);
+        //logger.log("UART: read FR: " + ret.toString(16));
         return ret;
     };
 
     this.data[this.CR] = 0x300;
     this.read[this.CR] = function() {
-        logger.log(uart.name + ": read CR");
+        //logger.log(uart.name + ": read CR");
         return uart.data[uart.CR];
     };
 
     this.write[this.CR] = function(halfword) {
-        logger.log(uart.name + ": write CR: " + halfword.toString(16));
-        var old = (bitops.get_bit(uart.data[uart.CR], 0) ? true : false);
-        uart.enabled = (bitops.get_bit(halfword, 0) ? true : false);
+        //logger.log(uart.name + ": write CR: " + halfword.toString(16));
+        var old = (uart.data[uart.CR] & 1) ? true : false;
+        uart.enabled = (halfword & 1) ? true : false;
         uart.data[uart.CR] = halfword;
         if (!old && uart.enabled) {
-            logger.log(uart.name + ": enabled");
+            //logger.log(uart.name + ": enabled");
             uart.enable();
         }
         //display.log("RX" + bitops.get_bit(halfword, 9));
         //display.log("TX" + bitops.get_bit(halfword, 8));
-        if (bitops.get_bit(halfword, 9))
+        if (halfword & 0x200)
             uart.rx_enabled = true;
         else
             uart.rx_enabled = false;
-        if (bitops.get_bit(halfword, 8))
+        if (halfword & 0x100)
             uart.tx_enabled = true;
         else
             uart.tx_enabled = false;
     };
 
     this.write[this.IBRD] = function(halfword) {
-        logger.log(uart.name + ": write IBRD: " + halfword.toString(16));
+        //logger.log(uart.name + ": write IBRD: " + halfword.toString(16));
         uart.data[uart.IBRD] = halfword;
     };
 
     this.write[this.FBRD] = function(onebyte) {
-        logger.log(uart.name + ": write FBRD: " + onebyte.toString(16));
+        //logger.log(uart.name + ": write FBRD: " + onebyte.toString(16));
         uart.data[uart.FBRD] = onebyte;
     };
 
     this.write[this.LCR_H] = function(onebyte) {
-        logger.log(uart.name + ": write LCR_H: " + onebyte.toString(16));
+        //logger.log(uart.name + ": write LCR_H: " + onebyte.toString(16));
         uart.update_fifo_onoff(onebyte);
         uart.data[uart.LCR_H] = onebyte;
     };
 
     this.data[this.IFLS] = 0;
     this.write[this.IFLS] = function(halfword) {
-        logger.log(uart.name + ": write IFLS: " + halfword.toString(16));
+        //logger.log(uart.name + ": write IFLS: " + halfword.toString(16));
         uart.update_fifo_level(halfword);
         uart.data[uart.IFLS] = halfword;
     };
 
     this.data[this.IMSC] = 0;
     this.read[this.IMSC] = function() {
-        logger.log(uart.name + ": read IMSC");
+        //logger.log(uart.name + ": read IMSC");
         return uart.data[uart.IMSC];
     };
     this.write[this.IMSC] = function(halfword) {
-        logger.log(uart.name + ": write IMSC: " + halfword.toString(16));
-        uart.tx_int_enabled = (bitops.get_bit(halfword, 5) ? true : false);
-        uart.rx_int_enabled = (bitops.get_bit(halfword, 4) ? true : false);
+        //logger.log(uart.name + ": write IMSC: " + halfword.toString(16));
+        uart.tx_int_enabled = (halfword & 0x20) ? true : false;
+        uart.rx_int_enabled = (halfword & 0x10) ? true : false;
         if (uart.tx_int_enabled && uart.tx_fifo.length === 0)
             uart.gic.send_interrupt(uart.irq);
         uart.data[uart.IMSC] = halfword;
@@ -933,16 +936,18 @@ function UART(id, baseaddr, irq, gic) {
     this.sending_rx_irq = false;
     this.read[this.MIS] = function() {
         var ret = 0;
-        ret = bitops.set_bit(ret, 5, (!uart.tx_fifo.length ? 1 : 0));
-        ret = bitops.set_bit(ret, 4, (uart.sending_rx_irq ? 1 : 0));
-        logger.log(uart.name + ": read MIS: " + ret);
+        if (!uart.tx_fifo.length)
+            ret += (1 << 5);
+        if (uart.sending_rx_irq)
+            ret += (1 << 4);
+        //logger.log(uart.name + ": read MIS: " + ret);
         return ret;
     };
 
     this.data[this.ICR] = 0;
     this.write[this.ICR] = function(halfword) {
-        logger.log(uart.name + ": write ICR: " + halfword.toString(16));
-        if (bitops.get_bit(halfword, 4))
+        //logger.log(uart.name + ": write ICR: " + halfword.toString(16));
+        if (halfword & 0x10)
             uart.sending_rx_irq = false;
         uart.data[uart.ICR] = halfword;
     };
@@ -997,8 +1002,15 @@ UART.prototype.input_char = function(str) {
     //if (!this.enabled)
     //    return;
     if (this.rx_int_enabled) {
-        //if (!this.fifo_enabled || this.rx_fifo.length > this.rx_fifo_level)
+        if (!this.fifo_enabled || this.rx_fifo.length > this.rx_fifo_level) {
             this.gic.send_interrupt(this.irq);
+        } else {
+            var uart = this;
+            setTimeout(function () {
+                    if (uart.rx_fifo.length > 0)
+                        uart.gic.send_interrupt(uart.irq);
+                }, 100);
+        }
         this.sending_rx_irq = true;
     }
 };
@@ -1119,39 +1131,37 @@ function MemoryController(options, memory, io) {
 MemoryController.prototype.ld_byte = function(addr) {
     if (this.io.read[addr])
         return this.io.ld_byte(addr);
-    assert(addr < this.memory.size, "ld_byte: addr < this.memory.size: " + toStringHex32(addr));
+    //assert(addr < this.memory.size, "ld_byte: addr < this.memory.size: " + toStringHex32(addr));
     return this.memory.mem_byte[addr];
 };
 
 MemoryController.prototype.st_byte = function(addr, onebyte) {
-    assert(onebyte >= 0, "onebyte >= 0");
+    //assert(onebyte >= 0, "onebyte >= 0");
     if (this.io.write[addr]) {
         this.io.st_byte(addr, onebyte);
         return;
     }
-    assert(addr < this.memory.size, "st_byte: addr < this.memory.size: " + toStringHex32(addr));
+    //assert(addr < this.memory.size, "st_byte: addr < this.memory.size: " + toStringHex32(addr));
     this.memory.mem_byte[addr] = onebyte;
 };
 
 MemoryController.prototype.ld_halfword = function(addr) {
     if (this.io.read[addr])
         return this.io.ld_halfword(addr);
-    assert(addr < this.memory.size, "ld_halfword: addr < this.memory.size: " + toStringHex32(addr));
-    var align = bitops.get_bit(addr, 0);
-    if (align)
+    //assert(addr < this.memory.size, "ld_halfword: addr < this.memory.size: " + toStringHex32(addr));
+    if (addr & 1)
         throw "ld_halfword: alignment error!";
     return this.memory.mem_halfword[addr >> 1];
 };
 
 MemoryController.prototype.st_halfword = function(addr, halfword) {
-    assert(halfword >= 0, "halfword >= 0");
+    //assert(halfword >= 0, "halfword >= 0");
     if (this.io.write[addr]) {
         this.io.st_halfword(addr, halfword);
         return;
     }
-    assert(addr < this.memory.size, "st_halfword: addr < this.memory.size" + toStringHex32(addr));
-    var align = bitops.get_bit(addr, 0);
-    if (align)
+    //assert(addr < this.memory.size, "st_halfword: addr < this.memory.size" + toStringHex32(addr));
+    if (addr & 1)
         throw "st_halfword: alignment error!";
     this.memory.mem_halfword[addr >> 1] = halfword;
 };
@@ -1162,44 +1172,46 @@ MemoryController.prototype.ld_word = function(addr) {
     if (addr >= 0x10000000)
         return this.io.ld_word(addr);
 
-    assert(addr < this.memory.size, "ld_word: addr < this.memory.size: " + toStringHex32(addr));
-    var align = bitops.get_bits(addr, 1, 0);
-    if (align === 0)
-        return this.memory.mem_word[addr >>> 2];
-    else
+    //assert(addr < this.memory.size, "ld_word: addr < this.memory.size: " + toStringHex32(addr));
+    if (addr & 3)
         throw "Unaligned ld_word: " + toStringHex32(addr);
+    return this.memory.mem_word[addr >>> 2];
+};
+
+MemoryController.prototype.ld_word_fast = function(addr) {
+    return this.memory.mem_word[addr >>> 2];
 };
 
 MemoryController.prototype.st_word = function(addr, word) {
-    assert(word >= 0, "word >= 0");
+    //assert(word >= 0, "word >= 0");
     if (this.io.write[addr]) {
         this.io.st_word(addr, word);
         return;
     }
 
-    assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+    //assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
     this.memory.mem_word[addr >>> 2] = word;
 };
 
 MemoryController.prototype.st_word_unaligned = function(addr, word) {
-    assert(word >= 0, "word >= 0");
+    //assert(word >= 0, "word >= 0");
     if (this.io.write[addr]) {
         this.io.st_word(addr, word);
         return;
     }
 
-    assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
-    var align = bitops.get_bits(addr, 1, 0);
+    //assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+    var align = addr & 3;
     if (align === 0) {
         this.memory.mem_word[addr >>> 2] = word;
     } else if (align == 2) {
-        this.st_halfword(addr, bitops.get_bits(word, 15, 0));
-        this.st_halfword(addr+2, bitops.get_bits(word, 31, 16));
+        this.st_halfword(addr, word & 0xffff);
+        this.st_halfword(addr+2, word >>> 16);
     } else {
-        this.st_byte(addr, bitops.get_bits(word, 7, 0));
-        this.st_byte(addr+1, bitops.get_bits(word, 15, 8));
-        this.st_byte(addr+2, bitops.get_bits(word, 23, 16));
-        this.st_byte(addr+3, bitops.get_bits(word, 31, 24));
+        this.st_byte(addr, word & 0xff);
+        this.st_byte(addr+1, (word >>> 8) & 0xff);
+        this.st_byte(addr+2, (word >>> 16) & 0xff);
+        this.st_byte(addr+3, word >>> 24);
     }
 };
 
@@ -1218,7 +1230,10 @@ function System(configs, options) {
     this.decode_cache = new Array();
     this.decode_cache_list = new Array();
     this.decode_cache_hit = 0;
+    this.decode_cache2 = new Array();
+    this.decode_cache2_list = new Array();
     this.state_changed_cb = null;
+    this.inst_counter = new Array(); 
 
     // Inherited object has to set own values
     this.irq_base = 0;
@@ -1231,17 +1246,6 @@ function System(configs, options) {
     this.gic = null;
     this.uart0 = null;
 }
-
-System.prototype.put_decode_cache = function(name, inst, pc) {
-    if (this.decode_cache[inst])
-        return;
-    this.decode_cache[inst] = name;
-    this.decode_cache_list.push(inst);
-    if (this.decode_cache_list.length > this.decode_cache_size) {
-        var old = this.decode_cache_list.shift();
-        this.decode_cache[old] = null;
-    }
-};
 
 System.prototype.load_binary = function(url, phyaddr, next_fn) {
     var callback;
@@ -1269,8 +1273,10 @@ System.prototype.load_binary = function(url, phyaddr, next_fn) {
 };
 
 System.prototype.run = function(system) {
-    system.cpu.log_regs(null);
-    system.cpu.print_pc(system.cpu.regs[15], null);
+    if (this.options.enable_logger) {
+        system.cpu.log_regs(null);
+        system.cpu.print_pc(system.cpu.regs[15], null);
+    }
     setTimeout(system.loop.bind(system), 10);
 };
 
@@ -1296,9 +1302,16 @@ System.prototype.update_current_function_display = function() {
     }
 };
 
+System.prototype.count_inst = function(inst_name) {
+    if (!this.inst_counter[inst_name])
+        this.inst_counter[inst_name] = 0;
+    this.inst_counter[inst_name] += 1;
+};
+
 System.prototype.loop = function() {
     var cpu = this.cpu;
     var options = this.options;
+    var gic = this.gic;
     var timeout = 10;
     try {
         if (!this.is_running)
@@ -1310,8 +1323,8 @@ System.prototype.loop = function() {
         var n_executed = 0;
         do {
             if (!options.suppress_interrupts &&
-                !cpu.cpsr.i && this.gic.is_pending()) {
-                var irq = this.gic.pick_interrupt();
+                !cpu.cpsr.i && gic.is_pending()) {
+                var irq = gic.pick_interrupt();
                 if (irq) {
                     this.n_interrupts += 1;
                     cpu.is_halted = false;
@@ -1329,7 +1342,7 @@ System.prototype.loop = function() {
             var will_stop = false;
             cpu.branch_to = null;
             var pc = cpu.regs[15];
-            assert(pc >= 0 && pc < 0x100000000, pc);
+            //assert(pc >= 0 && pc < 0x100000000, pc);
             if (options.enable_stopper && pc == options.stop_address)
                 throw "STOP";
 
@@ -1347,31 +1360,30 @@ System.prototype.loop = function() {
                     throw e;
                 }
             }
-            assert(inst != undefined, "inst != undefined");
+            //assert(inst != undefined, "inst != undefined");
 
             if (options.enable_stopper && inst == options.stop_instruction)
                 throw "STOP";
 
-            var oldregs = new Array();
+            var oldregs;
             if (options.enable_logger) {
+                oldregs = new Array();
                 cpu.store_regs(oldregs);
             }
             if (cpu.is_valid(inst)) { // NOP or NULL?
                 /*
                  * Decode an instruction
                  */
-                var inst_name;
-                if (this.decode_cache[inst]) {
-                    this.decode_cache_hit += 1;
-                    inst_name = this.decode_cache[inst];
-                } else {
-                    inst_name = cpu.decode(inst, pc);
-                    this.put_decode_cache(inst_name, inst, pc);
-                }
+                var inst_name = cpu.decode(inst, pc);
+
+                if (options.enable_instruction_counting)
+                    this.count_inst(inst_name);
+
                 /*
                  * Execute an instruction
                  */
-                if (!(cpu.has_cond(inst_name) && !cpu.cond(inst))) {
+                //if (!(cpu.has_cond(inst_name) && !cpu.cond(inst))) {
+                if (cpu.cond(inst)) {
                     try {
                         cpu.exec(inst_name, inst, pc);
                     } catch (e) {
@@ -1387,8 +1399,9 @@ System.prototype.loop = function() {
                     }
                 }
             }
+
             if (cpu.branch_to) {
-                assert(cpu.branch_to <= 0xffffffff && cpu.branch_to > 0, cpu.branch_to);
+                //assert(cpu.branch_to <= 0xffffffff && cpu.branch_to > 0, cpu.branch_to);
                 // FIXME: the stack of functions is not correct when interrupts happen
                 if (options.update_current_function)
                     this.update_current_function_display();

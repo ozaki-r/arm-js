@@ -167,12 +167,12 @@ BitOps.prototype.set_bit = function(uint, pos, val) {
 };
 
 BitOps.prototype.get_bit = function(uint, pos, dummy) {
-    assert(dummy == undefined, "get_bit: extra 3rd argument");
+    //assert(dummy === undefined, "get_bit: extra 3rd argument");
     return (uint & (1 << pos)) >>> pos;
 };
 
 BitOps.prototype.get_bit64 = function(ulong, pos, dummy) {
-    assert(dummy == undefined, "get_bit64: extra 3rd argument");
+    //assert(dummy === undefined, "get_bit64: extra 3rd argument");
     if (pos > 31) {
         var ulong_h = Math.floor(ulong / 0x100000000);
         return this.get_bit(ulong_h, pos - 31);
@@ -191,17 +191,21 @@ BitOps.prototype.zero_extend64 = function(val, n) {
 };
 
 BitOps.prototype.get_bits = function(uint, start, end) {
-    assert(end != undefined, "get_bits: missing 3rd argument");
-    if (start == 31 && end == 0) {
+    //assert(end != undefined, "get_bits: missing 3rd argument");
+    if (start == 31) {
+        if (end !== 0)
+            return uint >>> end;
         if (uint > 0xffffffff)
             this.and(uint, 0xffffffff);
         else
             return uint;
     }
-    if (start == 31)
-        return uint >>> end;
-    //return uint >>> end & ((1 << (start - end + 1)) - 1);
-    return this.and(uint >>> end, ((1 << (start - end + 1)) - 1));
+    //return this.and(uint >>> end, ((1 << (start - end + 1)) - 1));
+    var ret = (uint >>> end) & ((1 << (start - end + 1)) - 1);
+    if (ret >= 0x100000000)
+        return ret - 0x100000000;
+    else
+        return ret;
 };
 
 BitOps.prototype.get_bits64 = function(ulong, start, end) {
@@ -309,10 +313,10 @@ BitOps.prototype.copy_bit = function(dest, pos, src) {
 
 BitOps.prototype.ror = function(value, amount) {
     var m = amount % 32;
-    //var result = this.or64(value >>> m, this.lsl(value, (32-m)));
-    //var hi = this.get_bits(value, (32-m), m));
-    var lo = this.get_bits(value, m-1, 0);
-    var result = this.or(value >>> m, this.lsl(lo, (32-m)));
+    //var lo = this.get_bits(value, m-1, 0);
+    //var result = this.or(value >>> m, this.lsl(lo, (32-m)));
+    var lo = value & ((1 << m) - 1);
+    var result = (value >>> m) + this.lsl(lo, (32-m));
     //assert(result >= 0 && result <= 0xffffffff, "ror");
     return result;
 };
