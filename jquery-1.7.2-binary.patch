@@ -1,0 +1,34 @@
+--- jquery-1.7.2.js	2012-03-22 04:46:56.000000000 +0900
++++ jquery-1.7.2-binary.js	2012-06-02 22:02:16.000000000 +0900
+@@ -7302,6 +7302,7 @@
+ 			html: "text/html",
+ 			text: "text/plain",
+ 			json: "application/json, text/javascript",
++                        binary: "text/plain; charset=x-user-defined",
+ 			"*": allTypes
+ 		},
+ 
+@@ -7669,6 +7670,14 @@
+ 			}
+ 		}
+ 
++                if ( s.dataType == "binary" ) {
++                        if (jqXHR.hasOwnProperty("responseType")) {
++                                jqXHR.responseType = "arraybuffer";
++                        } else {
++                                jqXHR.overrideMimeType('text/plain; charset=x-user-defined');
++                        }
++                }
++
+ 		// Set the Accepts header for the server, depending on the dataType
+ 		jqXHR.setRequestHeader(
+ 			"Accept",
+@@ -7834,7 +7843,7 @@
+ 	}
+ 
+ 	// Remove auto dataType and get content-type in the process
+-	while( dataTypes[ 0 ] === "*" ) {
++	while( dataTypes[ 0 ] === "*" || dataTypes[ 0 ] === "binary") {
+ 		dataTypes.shift();
+ 		if ( ct === undefined ) {
+ 			ct = s.mimeType || jqXHR.getResponseHeader( "content-type" );

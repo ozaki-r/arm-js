@@ -1247,29 +1247,16 @@ function System(configs, options) {
     this.uart0 = null;
 }
 
-System.prototype.load_binary = function(url, phyaddr, next_fn) {
-    var callback;
+System.prototype.load_binary = function(url, phyaddr, cb) {
     var system = this;
-    callback = function(binary, size) {
-        var i;
-        if (size < 0) {
-            if (next_fn)
-                next_fn(system);
-        } else {
-            if (typeof binary == "string") {
-                for (i = 0; i < size; i++) {
-                    system.memctlr.st_byte(phyaddr + i, binary.charCodeAt(i));
-                }
-            } else {
-                for (i = 0; i < size; i++) {
-                    system.memctlr.st_byte(phyaddr + i, binary[i]);
-                }
+    $.get(url, null, function(data, textStatus, XMLHttpRequest) {
+            var length = data.length;
+            for (var i = 0; i < length; i++) {
+                system.memctlr.st_byte(phyaddr + i, data.charCodeAt(i));
             }
-            if (next_fn)
-                next_fn(system);
-        }
-    };
-    load_binary(url, callback);
+            if (cb)
+                cb(system);
+        }, "binary");
 };
 
 System.prototype.run = function(system) {
