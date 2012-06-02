@@ -1308,8 +1308,21 @@ System.prototype.loop = function() {
         if (options.enable_stopper && this.stop_after)
             remained = this.stop_after;
         var n_executed = 0;
+
+        var suppress_interrupts = options.suppress_interrupts;
+        var stop_address = options.enable_stopper ? options.stop_address : null;
+        var stop_instruction = options.enable_stopper ? options.stop_instruction : null;
+        var enable_logger = options.enable_logger;
+        var update_current_function = options.update_current_function;
+        var enable_branch_tracer = options.enable_branch_tracer;
+        var stop_at_every_branch = options.enable_stopper && options.stop_at_every_branch;
+        var stop_at_every_funccall = options.enable_stopper && options.stop_at_every_funccall;
+        var stop_counter = options.enable_stopper ? options.stop_counter : null;
+        var stop_after = options.enable_stopper && this.stop_after;
+        var enable_instruction_counting = options.enable_instruction_counting;
+
         do {
-            if (!options.suppress_interrupts &&
+            if (!suppress_interrupts &&
                 !cpu.cpsr.i && gic.is_pending()) {
                 var irq = gic.pick_interrupt();
                 if (irq) {
@@ -1330,7 +1343,7 @@ System.prototype.loop = function() {
             cpu.branch_to = null;
             var pc = cpu.regs[15];
             //assert(pc >= 0 && pc < 0x100000000, pc);
-            if (options.enable_stopper && pc == options.stop_address)
+            if (pc == stop_address)
                 throw "STOP";
 
             /*
@@ -1349,11 +1362,11 @@ System.prototype.loop = function() {
             }
             //assert(inst != undefined, "inst != undefined");
 
-            if (options.enable_stopper && inst == options.stop_instruction)
+            if (inst == stop_instruction)
                 throw "STOP";
 
             var oldregs;
-            if (options.enable_logger) {
+            if (enable_logger) {
                 oldregs = new Array();
                 cpu.store_regs(oldregs);
             }
@@ -1363,13 +1376,12 @@ System.prototype.loop = function() {
                  */
                 var inst_name = cpu.decode(inst, pc);
 
-                if (options.enable_instruction_counting)
+                if (enable_instruction_counting)
                     this.count_inst(inst_name);
 
                 /*
                  * Execute an instruction
                  */
-                //if (!(cpu.has_cond(inst_name) && !cpu.cond(inst))) {
                 if (cpu.cond(inst)) {
                     try {
                         cpu.exec(inst_name, inst, pc);
@@ -1390,30 +1402,30 @@ System.prototype.loop = function() {
             if (cpu.branch_to) {
                 //assert(cpu.branch_to <= 0xffffffff && cpu.branch_to > 0, cpu.branch_to);
                 // FIXME: the stack of functions is not correct when interrupts happen
-                if (options.update_current_function)
+                if (update_current_function)
                     this.update_current_function_display();
-                if (options.enable_branch_tracer)
+                if (enable_branch_tracer)
                     btracer.log(cpu.branch_to, cpu.regs[15], this.function_stack.length);
 
                 cpu.regs[15] = cpu.branch_to;
                 cpu.print_pc(cpu.regs[15], pc);
-                if (options.enable_stopper && options.stop_at_every_branch)
+                if (stop_at_every_branch)
                     will_stop = true;
-                if (options.enable_stopper && options.stop_at_every_funccall) {
+                if (stop_at_every_funccall) {
                     if (Symbols[cpu.branch_to])
                         will_stop = true;
                 }
             } else {
                 cpu.regs[15] = pc + 4;
             }
-            if (options.enable_logger)
+            if (enable_logger)
                 cpu.log_regs(oldregs);
 
             this.n_instructions += 1;
 
-            if (options.enable_stopper && this.n_instructions == options.stop_counter)
+            if (this.n_instructions == stop_counter)
                 will_stop = true;
-            if (options.enable_stopper && this.stop_after && --remained <= 0)
+            if (stop_after && --remained <= 0)
                 will_stop = true;
 
             n_executed += 1;
