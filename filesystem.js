@@ -35,9 +35,9 @@ function errorHandler(e) {
 
 window.webkitStorageInfo.requestQuota(PERSISTENT, 50*1024*1024, function(grantedBytes) {
   //window.requestFileSystem(window.PERSISTENT, grantedBytes, onInitFs, errorHandler);
-  console.log((grantedBytes/1024/1024).toString() + 'MB granted');
+  display.log((grantedBytes/1024/1024).toString() + 'MB granted');
 }, function(e) {
-  console.log('Error', e);
+  display.log('Error', e);
 });
 
 /*
