@@ -195,7 +195,7 @@ function KMI(baseaddr, irq, gic) {
     // KMIDATA Received data (read)/ Data to be transmitted (write).
     this.read[this.DATA] = function() {
         if (kmi.char_buffer.length > 0)
-            return kmi.char_buffer.shift().charCodeAt(0);
+            return kmi.char_buffer.shift();
         else
             return 0;
     };
@@ -848,7 +848,7 @@ function UART(id, baseaddr, irq, gic) {
     this.read[this.DR] = function() {
         //logger.log(uart.name + ": read DR");
         if (uart.rx_fifo.length > 0)
-            return uart.rx_fifo.shift().charCodeAt(0);
+            return uart.rx_fifo.shift();
         else
             return 0;
     };
@@ -1595,6 +1595,7 @@ System.prototype.dump_io = function() {
 System.prototype.test_terminal = function() {
     for (var i=0; i < 128; i++) {
         var str = String.fromCharCode(i);
+        display.log(str);
         this.uart0.write_to_terminal(str);
     }
 };

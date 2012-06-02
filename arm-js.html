@@ -84,14 +84,12 @@ $(document).ready(function() {
 
     system = new VersatileExpress(configurations, options);
     function term_handler(str) {
-        //system.uart.send_chars(str);
-        system.keyboard.receive_char(str);
-        system.uart0.input_char(str);
+        //system.keyboard.receive_char(str.charCodeAt(0));
+        system.uart0.input_char(str.charCodeAt(0));
     }
+
     term = new Term(80, 20, term_handler);
     system.uart0.write_to_terminal = term.write.bind(term);
-    system.uart1.write_to_terminal = term.write.bind(term);
-    //system.uart1.write_to_terminal = function() {return;}; // Dummy
 
     function system_state_changed_cb(system) {
         if (system.is_booted) {
@@ -228,7 +226,6 @@ $(document).ready(function() {
     options.register_handlers();
     parameters.read_saved_values(display);
     parameters.register_handlers();
-    term.set_handlers();
 
     prev = 0.0;
     function update_instruction_display() {
@@ -266,9 +263,7 @@ $(function() {
     <li class="tab"><a href="#tab-4">Debug Options</a></li>
   </ul>
   <div id="tab-1">
-    <input id=input>
-    <table id=terminal border="0" cellspacing="0" cellpadding="0">
-    </table>
+    <div id=terminal tabindex=0></div>
   </div>
   <div id="tab-2">
     <fieldset id="configuration">
