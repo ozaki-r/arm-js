@@ -8,7 +8,7 @@ function Configurations() {
     this.memory_size = 20*1024*1024;
 
     this.configuration_strings = [
-        'memory_size',
+        'memory_size'
     ];
 
     this.JSONlocalStorage = new JSONlocalStorage("configurations", this, this.configuration_strings);
@@ -65,7 +65,7 @@ function Parameters() {
         'cmdline',
         'initrd_url',
         'initrd_size',
-        'initrd_decomp_size',
+        'initrd_decomp_size'
     ];
 
     this.JSONlocalStorage = new JSONlocalStorage("parameters", this, this.parameter_strings);

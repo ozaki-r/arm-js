@@ -46,12 +46,12 @@ function Options() {
         'update_current_function',
         'suppress_interrupts',
         'show_act_on_viraddr',
-        'enable_instruction_counting',
+        'enable_instruction_counting'
     ];
     this.hex_values = {
         'stop_address': true,
         'stop_instruction': true,
-        'show_act_on_viraddr': true,
+        'show_act_on_viraddr': true
     };
 
     this.JSONlocalStorage = new JSONlocalStorage("options", this, this.option_strings);
