@@ -1,0 +1,2 @@
+It emulates ARMv7 and some peripherals of Vesertile Express.
+It can run Linux 3.3.8 and user processes (busybox).
