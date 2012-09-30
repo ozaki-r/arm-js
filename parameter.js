@@ -54,11 +54,11 @@ Configurations.prototype.dump = function(target) {
 };
 
 function Parameters() {
-    this.zImage_url = null;
-    this.cmdline = null;
-    this.initrd_url = null;
-    this.initrd_size = null;
-    this.initrd_decomp_size = null;
+    this.zImage_url = 'zImage-3.3.6';
+    this.cmdline = 'rw root=/dev/ram0 console=ttyAMA0';
+    this.initrd_url = 'initrd-3.3.6.cpio.lzo';
+    this.initrd_size = 172285;
+    this.initrd_decomp_size = 310784;
 
     this.parameter_strings = [
         'zImage_url',
