@@ -5957,56 +5957,15 @@ function CPU_ARM_MMU(cpu, memctlr) {
     this.baseaddr0 = 0;
     this.baseaddr1 = 0;
     this.memctlr = memctlr;
-    this.tlbs = new Array();
-    this.tlbs[0] = new Object();
-    this.current = this.tlbs[0];
     this.asid = 0;
     this.width = 0;
     this.mask = (1 << (31 - this.width - 20 + 1)) - 1;
     this.cp15 = null;
     this.check_unaligned = false;
-    this.tlb_hit_section = 0;
-    this.tlb_hit_smallpage = 0;
 }
-
-CPU_ARM_MMU.prototype.flush_tlb = function(asid, mva) {
-    if (asid != null && asid != undefined) {
-        if (mva) {
-            this.tlbs[asid][mva] = null;
-        } else {
-            this.tlbs[asid] = [];
-        }
-    } else {
-        if (mva) {
-            //display.log(mva.toString(16));
-            for (var i in this.tlbs)
-                this.tlbs[i][mva] = null;
-        } else {
-            for (var i in this.tlbs)
-                this.tlbs[i] = [];
-        }
-    }
-    this.current = this.tlbs[this.asid];
-};
 
 CPU_ARM_MMU.prototype.trans_to_phyaddr = function(vaddr, is_write) {
     if (this.enabled) {
-        // TLB
-        var tmp;
-        if (this.current[vaddr >>> 20]) {// Section
-            this.tlb_hit_section += 1;
-            tmp = this.current[vaddr >>> 20] << 20;
-            if (tmp >= 0x100000000)
-                tmp -= 0x100000000;
-            return (vaddr & 0x000fffff) + tmp;
-        }
-        if (this.current[vaddr >>> 12]) {// Small Page
-            this.tlb_hit_smallpage += 1;
-            tmp = this.current[vaddr >>> 12] << 12;
-            if (tmp >= 0x100000000)
-                tmp -= 0x100000000;
-            return (vaddr & 0x00000fff) + tmp;
-        }
         return this.walk_table(vaddr, is_write);
     } else {
         return vaddr;
@@ -6170,7 +6129,6 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
                     tmp += 0x100000000;
                 paddr = tmp + (vaddr & 0x000fffff);
             }
-            this.current[vaddr >>> 20] = paddr >>> 20;
             return paddr;
         case 3:
             throw "Translation fault (1st 3): " + vaddr.toString(16);
@@ -6208,7 +6166,6 @@ CPU_ARM_MMU.prototype.walk_table = function(vaddr, is_write) {
     if (tmp2 < 0)
         tmp2 += 0x100000000;
     paddr = tmp2 + (vaddr & 0x00000fff);
-    this.current[vaddr >>> 12] = paddr >>> 12;
     return paddr;
 };
 
@@ -6351,10 +6308,6 @@ CPU_ARM_MMU.prototype.dump = function() {
     msg += "baseaddr0: " + toStringHex32(this.baseaddr0) + "\n";
     msg += "baseaddr1: " + toStringHex32(this.baseaddr1) + "\n";
     msg += "width: " + this.width + "\n";
-    msg += "TLB Hit(Section): " + this.tlb_hit_section + "\n";
-    msg += "TLB Hit(Small Page): " + this.tlb_hit_smallpage + "\n";
-    for (var i in this.tlbs)
-        msg += "TLB[ASID=" + i + "]: " + this.tlbs[i].length + "\n";
     display.log(msg);
 };
 
@@ -6607,7 +6560,6 @@ function CPU_ARM_CP15(options, cpu) {
             cp15.log_value(word, "word");
             cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbcr");
         }
-        mmu.flush_tlb();
         display.log("TTBCR called.");
     };
     this.regs_w[this.SCTLR] = function (word) {
@@ -6743,43 +6695,30 @@ function CPU_ARM_CP15(options, cpu) {
 
     this.regs_w[this.ITLBIALL] = function (word) {
         //display.log("ITLBIALL: " + word.toString(16)); // invalidate instruction TLB
-        mmu.flush_tlb();
     };
     this.regs_w[this.ITLBIMVA] = function (word) {
         //display.log("ITLBIMVA: " + word.toString(16)); // invalidate instruction TLB entry by MVA
-        mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
     };
     this.regs_w[this.ITLBIASID] = function (word) {
         //display.log("ITLBIASID: " + word.toString(16)); // invalidate instruction TLB by ASID match
-        mmu.flush_tlb(bitops.get_bits(word, 7, 0));
     };
     this.regs_w[this.DTLBIALL] = function (word) {
         //display.log("DTLBIALL: " + word.toString(16)); // invalidate data TLB
-        mmu.flush_tlb(); // FIXME
     };
     this.regs_w[this.DTLBIMVA] = function (word) {
         //display.log("DTLBIMVA: " + word.toString(16)); // invalidate data TLB entry by MVA
-        mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
     };
-    this.regs_w[this.DTLBIASID] = function (word) {
-        //display.log("DTLBIASID: " + word.toString(16)); // invalidate data TLB by ASID match
-        mmu.flush_tlb(bitops.get_bits(word, 7, 0));
+    this.regs_w[this.DTLBIASID] = function (word) {  // invalidate data TLB by ASID match
+        //display.log("DTLBIASID: " + word.toString(16));
     };
-    this.regs_w[this.UTLBIALL] = function (word) {
-        //display.log("UTLBIALL: " + word.toString(16)); // invalidate unified TLB
-        mmu.flush_tlb(); // FIXME
+    this.regs_w[this.UTLBIALL] = function (word) {  // invalidate unified TLB
+        //display.log("UTLBIALL: " + word.toString(16));
     };
-    this.regs_w[this.UTLBIMVA] = function (word) {
-        //display.log("UTLBIMVA: " + word.toString(16)); // invalidate unified TLB entry by MVA
-        // FIXME
-        //mmu.flush_tlb(bitops.get_bits(word, 7, 0), bitops.get_bits(word, 31, 12));
-        mmu.flush_tlb();
-        //mmu.flush_tlb(null, bitops.get_bits(word, 31, 12));
+    this.regs_w[this.UTLBIMVA] = function (word) {  // invalidate unified TLB entry by MVA
+        //display.log("UTLBIMVA: " + word.toString(16));
     };
     this.regs_w[this.UTLBIASID] = function (word) {
-        //display.log("UTLBIASID: " + word.toString(16)); // invalidate unified TLB by ASID match
-        //mmu.flush_tlb(bitops.get_bits(word, 7, 0));
-        mmu.flush_tlb(word & 0xff);
+        //display.log("UTLBIASID: " + word.toString(16));
     };
 
     this.PRRR = [10, 0, 2, 0]; // c10, Primary Region Remap Register (PRRR)
@@ -6800,16 +6739,11 @@ function CPU_ARM_CP15(options, cpu) {
     this.CONTEXTIDR = [13, 0, 0, 1];
     this.regs[this.CONTEXTIDR] = 0;
     this.regs_w[this.CONTEXTIDR] = function (word) {
-        // FIXME
         var procid = (word >>> 8) & 0x00ffffff;
         var asid = word & 0xff;
         var old_asid = cp15.regs[cp15.CONTEXTIDR] & 0xff;
-        //display.log("PROCID=" + procid + ", ASID=" + asid + ", ASID(old)=" + old_asid);
-        // FIXME
+        display.log("PROCID=" + procid + ", ASID=" + asid + ", ASID(old)=" + old_asid);
         mmu.asid = asid;
-        if (!mmu.tlbs[mmu.asid])
-            mmu.tlbs[mmu.asid] = new Object();
-        mmu.current = mmu.tlbs[mmu.asid];
         cp15.regs[cp15.CONTEXTIDR] = word;
     };
 
