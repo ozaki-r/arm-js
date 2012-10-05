@@ -228,15 +228,27 @@ $(document).ready(function() {
     parameters.register_handlers();
 
     prev = 0.0;
+    elapsed_time = 0;
     function update_instruction_display() {
         var display = document.getElementById('inst_counter');
         display.innerHTML = system.n_instructions.toString();
-        if (prev != 0.0) {
+        if (system.is_running) {
+            if (prev != 0.0) {
+                display = document.getElementById('kips');
+                var kips = (system.n_instructions - prev) / 1000;
+                display.innerHTML = kips.toFixed(1);
+            }
+            prev = system.n_instructions;
+
+            display = document.getElementById('elapsed_time');
+            elapsed_time += 1;
+            display.innerHTML = elapsed_time.toString();
+        } else {
             display = document.getElementById('kips');
-            var kips = (system.n_instructions - prev) / 1000;
+            var kips = 0.0;
             display.innerHTML = kips.toFixed(1);
+            prev = system.n_instructions;
         }
-        prev = system.n_instructions;
     }
 
     setInterval(update_instruction_display, 1000);
@@ -254,7 +266,7 @@ $(function() {
   <button id="save" type="button" disabled>Save system</button>
   <button id="restore" type="button">Restore system</button>
 </div>
-<div><span id="kips">0.0</span> KIPS / <span id="inst_counter">0</span> instructions executed</div>
+<div><span id="kips">0.0</span> KIPS / <span id="inst_counter">0</span> instructions executed / <span id="elapsed_time">0</span> sec elapsed</div>
 <div id="ui-tabs">
   <ul>
     <li class="tab"><a href="#tab-1">Emulator Terminal</a></li>
