@@ -54,14 +54,14 @@ Configurations.prototype.dump = function(target) {
 };
 
 function Parameters() {
-    this.zImage_url = 'zImage-3.3.6';
-    this.cmdline = 'rw root=/dev/ram0 console=ttyAMA0';
+    this.Image_url = 'Image-3.3.6';
+    this.cmdline = 'rw root=/dev/ram0 console=ttyAMA0 earlyprintk';
     this.initrd_url = 'initrd-3.3.6.cpio.lzo';
     this.initrd_size = 172285;
     this.initrd_decomp_size = 310784;
 
     this.parameter_strings = [
-        'zImage_url',
+        'Image_url',
         'cmdline',
         'initrd_url',
         'initrd_size',
@@ -93,7 +93,7 @@ Parameters.prototype.reflect_input_text = function(name) {
 };
 
 Parameters.prototype.reflect = function() {
-    this.reflect_input_text('zImage_url');
+    this.reflect_input_text('Image_url');
     this.reflect_input_text('cmdline');
     this.reflect_input_text('initrd_url');
     this.reflect_input_number('initrd_size');
@@ -115,7 +115,7 @@ Parameters.prototype.register_input_text_handler = function(name) {
 };
 
 Parameters.prototype.register_handlers = function() {
-    this.register_input_text_handler('zImage_url');
+    this.register_input_text_handler('Image_url');
     this.register_input_text_handler('cmdline');
     this.register_input_text_handler('initrd_url');
     this.register_input_number_handler('initrd_size');

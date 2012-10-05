@@ -1679,6 +1679,7 @@ VersatileExpress.prototype.boot = function(params) {
      * r2 = physical address of tagged list in system RAM, or
      * physical address of device tree block (dtb) in system RAM
      */
+    /*
     this.cpu.regs[0] = 0;
     //this.cpu.regs[1] = 387; // versatile_pb in arch/arm/tools/mach-types
     this.cpu.regs[1] = 2272; // vexpress in arch/arm/tools/mach-types
@@ -1691,6 +1692,22 @@ VersatileExpress.prototype.boot = function(params) {
     //this.load_binary("zImage-3.3.2-debug-nofs-nonet-lzo-v7-printk", 0x00100000, this.run);
     this.load_binary(params.initrd_url, 0x00800000);
     this.load_binary(params.zImage_url, 0x00100000, this.run);
+    */
+    /*
+     * from linux/arch/arm/kernel/head.S
+     *
+     * This is normally called from the decompressor code.  The requirements
+     * are: MMU = off, D-cache = off, I-cache = dont care, r0 = 0,
+     * r1 = machine nr, r2 = atags or dtb pointer.
+     */
+    this.cpu.regs[0] = 0;
+    this.cpu.regs[1] = 2272; // vexpress in arch/arm/tools/mach-types
+    this.cpu.regs[2] = this.taglist_start_addr; // Typical place
+    this.cpu.regs[15] = 0x00008000; // PC
+    this.cpu.cpsr.m = 0x13; // 10011 Supervisor mode
+    this.cpu.log_cpsr();
+    this.load_binary(params.initrd_url, 0x00800000);
+    this.load_binary(params.Image_url, 0x00008000, this.run);
 
     this.is_booted = true;
     this.is_running = true;
