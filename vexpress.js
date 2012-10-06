@@ -17,6 +17,7 @@ function SystemRegisters(baseaddr, options) {
     this.SYS_SW      = this.baseaddr + 0x04;
     this.SYS_LED     = this.baseaddr + 0x08;
     this.CLOCK_24MHZ = this.baseaddr + 0x5c;
+    this.SYS_MISC    = this.baseaddr + 0x60;
     this.PROCID0     = this.baseaddr + 0x84;
 
     var sys_id = 0;
@@ -28,6 +29,7 @@ function SystemRegisters(baseaddr, options) {
     this.read[this.SYS_ID] = sys_id;
     this.read[this.SYS_SW] = 0;
     this.read[this.SYS_LED] = 0;
+    this.read[this.SYS_MISC] = 0;
 
     var procid0 = 0;
     //procid0 = bitops.set_bits(procid0, 31, 24, 0x12); // Cortex-A5
