@@ -4042,6 +4042,11 @@ CPU_ARMv7.prototype.vmrs = function(inst_name, inst, addr) {
     this.print_inst_unimpl(addr, inst, "vmrs");
 };
 
+CPU_ARMv7.prototype.nop = function(inst_name, inst, addr) {
+    this.print_inst("NOP", inst, addr);
+    this.print_inst_unimpl(addr, inst, "nop");
+};
+
 CPU_ARMv7.prototype.exec = function(inst_name, inst, addr) {
     this.current = inst_name;
     return this[inst_name](inst, addr);
@@ -4438,8 +4443,7 @@ CPU_ARMv7.prototype.decode_msr_imm_and_hints = function(inst, addr) {
                             switch (op2) {
                                 case 0:
                                     // NOP
-                                    this.abort_not_impl("NOP", inst, addr);
-                                    break;
+                                    return "nop";
                                 case 1:
                                     // YIELD
                                     this.abort_not_impl("YIELD", inst, addr);
