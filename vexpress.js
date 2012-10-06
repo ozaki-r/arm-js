@@ -246,7 +246,9 @@ function RTC() {
     this.read[0x10017ffc] = 0;
 }
 
-function GenericInterruptController() {
+function GenericInterruptController(baseaddr) {
+    this.baseaddr = baseaddr;
+
     this.read = new Array();
     this.write = new Array();
     this.enabled = false;
@@ -264,7 +266,7 @@ function GenericInterruptController() {
      */
     var gic = this;
     // Distributor Control Register (ICDDCR)
-    this.ICDDCR = 0x1e001000;
+    this.ICDDCR = this.baseaddr + 0x1000;
     this[this.ICDDCR] = 0;
     this.read[this.ICDDCR] = function() {
         return gic[gic.ICDDCR];
@@ -283,7 +285,7 @@ function GenericInterruptController() {
     // Interrupt Controller Type Register (ICDICTR)
     // [4:0]: ITLinesNumber
     // TODO
-    this.ICDICTR = 0x1e001004;
+    this.ICDICTR = this.baseaddr + 0x1004;
     this[this.ICDICTR] = 0;
     this[this.ICDICTR] = bitops.set_bits(this[this.ICDICTR], 7, 5, this.CPUNumber);
     this[this.ICDICTR] = bitops.set_bits(this[this.ICDICTR], 4, 0, this.ITLinesNumber);
@@ -294,7 +296,7 @@ function GenericInterruptController() {
     var i;
     // Interrupt Configuration Registers (ICDICFRn)
     for (i=0; i < 2*(this.ITLinesNumber+1); i++) {
-        this["ICDICFR" + i] = 0x1e001c00 + i*4;
+        this["ICDICFR" + i] = this.baseaddr + 0x1c00 + i*4;
         this[gic["ICDICFR" + i]] = 0;
         this.read[this["ICDICFR" + i]] = function() {
             return gic[gic["ICDICFR" + i]];
@@ -306,7 +308,7 @@ function GenericInterruptController() {
     }
     // Interrupt Processor Targets Registers (ICDIPTRn)
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
-        this["ICDIPTR" + i] = 0x1e001800 + i*4;
+        this["ICDIPTR" + i] = this.baseaddr + 0x1800 + i*4;
         this[gic["ICDIPTR" + i]] = 0;
         this.read[this["ICDIPTR" + i]] = function() {
             return gic[gic["ICDIPTR" + i]];
@@ -318,7 +320,7 @@ function GenericInterruptController() {
     }
     // Interrupt Priority Registers (ICDIPRn)
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
-        this["ICDIPR" + i] = 0x1e001400 + i*4;
+        this["ICDIPR" + i] = this.baseaddr + 0x1400 + i*4;
         this[gic["ICDIPR" + i]] = 0;
         this.read[this["ICDIPR" + i]] = function() {
             return gic[gic["ICDIPR" + i]];
@@ -330,7 +332,7 @@ function GenericInterruptController() {
     }
     // Interrupt Clear-Enable Registers (ICDICERn)
     for (i=0; i < (this.ITLinesNumber+1); i++) {
-        this["ICDICER" + i] = 0x1e001180 + i*4;
+        this["ICDICER" + i] = this.baseaddr + 0x1180 + i*4;
         this[gic["ICDICER" + i]] = 0;
         this.read[this["ICDICER" + i]] = function() {
             return gic[gic["ICDICER" + i]];
@@ -342,7 +344,7 @@ function GenericInterruptController() {
     }
     // Interrupt Set-Enable Registers (ICDISERn)
     for (i=0; i < (this.ITLinesNumber+1); i++) {
-        this["ICDISER" + i] = 0x1e001100 + i*4;
+        this["ICDISER" + i] = this.baseaddr + 0x1100 + i*4;
         this[gic["ICDISER" + i]] = 0;
         this.read[this["ICDISER" + i]] = function() {
             return gic[gic["ICDISER" + i]];
@@ -357,7 +359,7 @@ function GenericInterruptController() {
      * CPU interface registers
      */
     // CPU Interface Control Register (ICCICR)
-    this.ICCICR = 0x1e000100;
+    this.ICCICR = this.baseaddr + 0x100;
     this[this.ICCICR] = 0;
     this.write[this.ICCICR] = function(word) {
         // TODO
@@ -365,7 +367,7 @@ function GenericInterruptController() {
     };
 
     // Interrupt Priority Mask Register (ICCPMR)
-    this.ICCPMR = 0x1e000104;
+    this.ICCPMR = this.baseaddr + 0x104;
     this[this.ICCPMR] = 0;
     this.write[this.ICCPMR] = function(word) {
         // TODO
@@ -373,7 +375,7 @@ function GenericInterruptController() {
     };
 
     // Interrupt Acknowledge Register (ICCIAR)
-    this.ICCIAR = 0x1e00010c;
+    this.ICCIAR = this.baseaddr + 0x10c;
     this.read[this.ICCIAR] = function() {
         if (gic.sent_irqs.length === 0) {
             // There is no pending IRQ
@@ -385,7 +387,7 @@ function GenericInterruptController() {
     };
 
     // End of Interrupt Register (ICCEOIR)
-    this.ICCEOIR = 0x1e000110;
+    this.ICCEOIR = this.baseaddr + 0x110;
     this.write[this.ICCEOIR] = function(word) {
         if (gic.sent_irqs.length === 0)
             return;
@@ -1627,7 +1629,7 @@ function VersatileExpress(configs, options) {
     this.memory = new Memory(this.configs.memory_size);
     this.memctlr = new MemoryController(options, this.memory, this.io);
     this.cpu = new CPU_ARMv7(options, this, this.memctlr);
-    this.gic = new GenericInterruptController();
+    this.gic = new GenericInterruptController(0x1e000000);
     this.io.register_io("GIC", this.gic);
     this.pl180 = new PL180(0x10005000);
     this.io.register_io("PL180", this.pl180);
