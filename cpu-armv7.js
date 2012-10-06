@@ -1667,7 +1667,10 @@ CPU_ARMv7.prototype.ldr_imm = function(inst, addr) {
 
     if (n == 13 && p === 0 && u == 1 && w === 0 && imm12 === 4) {
         // POP A2
-        this.regs[t] = this.ld_word(this.regs[13]);
+        if (t == 15)
+            this.branch_to = this.ld_word(this.regs[13]);
+        else
+            this.regs[t] = this.ld_word(this.regs[13]);
         this.regs[13] = this.regs[13] + 4;
         this.print_inst_unimpl(addr, inst, "pop");
         return;
