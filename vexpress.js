@@ -67,6 +67,10 @@ function SystemRegisters(baseaddr, options) {
     };
 }
 
+SystemRegisters.prototype.dump = function() {
+    display.log("CLOCK_24MHz=" + this.data[this.CLOCK_24MHZ].time);
+};
+
 function UnimplementedDevice(baseaddr) {
     this.baseaddr = baseaddr;
 
@@ -1785,6 +1789,8 @@ VersatileExpress.prototype.dump = function() {
     this.gic.dump();
     //display.log("\nIO:");
     //this.io.dump();
+    display.log("\nSysRegs:");
+    this.sysregs.dump();
     display.log("Timer0:");
     this.timer0.dump();
     display.log("Timer1:");
