@@ -1693,22 +1693,16 @@ function VersatileExpress(configs, options) {
     this.cpu = new CPU_ARMv7(options, this, this.memctlr);
     this.gic = new GenericInterruptController(0x1e000000);
     this.io.register_io("GIC", this.gic);
-    this.pl180 = new PL180(0x10005000);
-    this.io.register_io("PL180", this.pl180);
-    this.keyboard = new KMI(0x10006000, this.irq_base + 12, this.gic);
-    this.io.register_io("Keyboard", this.keyboard);
-    this.mouse = new KMI(0x10007000, this.irq_base + 13, this.gic);
-    this.io.register_io("Mouse", this.mouse);
-    this.rtc = new RTC();
-    this.io.register_io("RTC", this.rtc);
+    //this.pl180 = new PL180(0x10005000);
+    //this.io.register_io("PL180", this.pl180);
+    //this.keyboard = new KMI(0x10006000, this.irq_base + 12, this.gic);
+    //this.io.register_io("Keyboard", this.keyboard);
+    //this.mouse = new KMI(0x10007000, this.irq_base + 13, this.gic);
+    //this.io.register_io("Mouse", this.mouse);
+    //this.rtc = new RTC();
+    //this.io.register_io("RTC", this.rtc);
     this.uart0 = new UART(0, 0x10009000, this.irq_base + 5, this.gic);
-    this.uart1 = new UART(1, 0x1000a000, this.irq_base + 6, this.gic);
-    this.uart2 = new UART(2, 0x1000b000, this.irq_base + 7, this.gic);
-    this.uart3 = new UART(3, 0x1000c000, this.irq_base + 8, this.gic);
     this.io.register_io("UART0", this.uart0);
-    this.io.register_io("UART1", this.uart1);
-    this.io.register_io("UART2", this.uart2);
-    this.io.register_io("UART3", this.uart3);
     this.timer0 = new SP804(0x10011000, this.irq_base + 2, this.gic);
     this.timer1 = new SP804(0x10012000, this.irq_base + 2, this.gic);
     this.io.register_io("SP804#0", this.timer0);
@@ -1738,7 +1732,7 @@ VersatileExpress.prototype = new System();
 VersatileExpress.prototype.boot = function(params) {
     this.memory.init();
 
-    this.setup_tagged_list(params);
+    //this.setup_tagged_list(params);
     /*
      * from http://lxr.linux.no/linux/Documentation/arm/Booting
      * CPU register settings
@@ -1775,6 +1769,7 @@ VersatileExpress.prototype.boot = function(params) {
     this.cpu.cpsr.m = 0x13; // 10011 Supervisor mode
     this.cpu.log_cpsr();
     this.load_binary(params.initrd_url, 0x00800000);
+    this.load_binary(params.dtb_url, this.taglist_start_addr);
     this.load_binary(params.Image_url, 0x00008000, this.run);
 
     this.is_booted = true;
@@ -1794,11 +1789,7 @@ VersatileExpress.prototype.save = function() {
     params.n_instructions = this.n_instructions;
     params.gic = this.gic.save();
     params.timer0 = this.timer0.save();
-    params.timer1 = this.timer1.save();
     params.uart0 = this.uart0.save();
-    params.uart1 = this.uart1.save();
-    params.uart2 = this.uart2.save();
-    params.uart3 = this.uart3.save();
     params.sysctrl = this.sysctrl.save();
 
     var params_str = JSON.stringify(params);
@@ -1817,17 +1808,9 @@ VersatileExpress.prototype.restore = function() {
         system.cpu.mmu.restore(params.mmu);
         system.tick = params.tick;
         system.n_instructions = params.n_instructions;
-        if (params.gic) {
-            system.gic.restore(params.gic);
-            system.timer0.restore(params.timer0);
-            system.timer1.restore(params.timer1);
-        }
-        if (params.uart0) {
-            system.uart0.restore(params.uart0);
-            system.uart1.restore(params.uart1);
-            system.uart2.restore(params.uart2);
-            system.uart3.restore(params.uart3);
-        }
+        system.gic.restore(params.gic);
+        system.timer0.restore(params.timer0);
+        system.uart0.restore(params.uart0);
         system.sysctrl.restore(params.sysctrl);
 
         system.restore_memory();
@@ -1853,10 +1836,8 @@ VersatileExpress.prototype.dump = function() {
     //this.io.dump();
     display.log("\nSysRegs:");
     this.sysregs.dump();
-    display.log("Timer0:");
+    display.log("\nTimer0:");
     this.timer0.dump();
-    display.log("Timer1:");
-    this.timer1.dump();
     display.log("\nUART0:");
     this.uart0.dump();
     display.log("\n");

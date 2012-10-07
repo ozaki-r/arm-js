@@ -59,13 +59,15 @@ function Parameters() {
     this.initrd_url = 'initramfs.cpio.lzo';
     this.initrd_size = 172285;
     this.initrd_decomp_size = 310784;
+    this.dtb_url = 'vexpress-armjs.dtb';
 
     this.parameter_strings = [
         'Image_url',
         'cmdline',
         'initrd_url',
         'initrd_size',
-        'initrd_decomp_size'
+        'initrd_decomp_size',
+        'dtb_url',
     ];
 
     this.JSONlocalStorage = new JSONlocalStorage("parameters", this, this.parameter_strings);
@@ -98,6 +100,7 @@ Parameters.prototype.reflect = function() {
     this.reflect_input_text('initrd_url');
     this.reflect_input_number('initrd_size');
     this.reflect_input_number('initrd_decomp_size');
+    this.reflect_input_text('dtb_url');
 };
 
 Parameters.prototype.register_input_number_handler = function(name) {
@@ -120,6 +123,7 @@ Parameters.prototype.register_handlers = function() {
     this.register_input_text_handler('initrd_url');
     this.register_input_number_handler('initrd_size');
     this.register_input_number_handler('initrd_decomp_size');
+    this.register_input_text_handler('dtb_url');
 };
 
 Parameters.prototype.dump = function(target) {

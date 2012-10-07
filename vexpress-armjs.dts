@@ -1,0 +1,137 @@
+/*
+ * ARM Ltd. Versatile Express for arm-js
+ * Licensed under GPL 2.0
+ *
+ * This DTS is based on vexpress-v2p-ca9.dts
+ * and vexpress-v2m.dtsi.
+ *
+ */
+
+/dts-v1/;
+
+/ {
+	model = "ARM-JS";
+	/* arm,hbi = <0x191>; */
+	compatible = "arm,vexpress";
+	interrupt-parent = <&gic>;
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	chosen {
+		bootargs = "rw root=/dev/ram0 console=ttyAMA0 earlyprintk initrd=0x00800000,172285";
+	};
+
+	aliases {
+		serial0 = &v2m_serial0;
+		arm,v2m_timer = &v2m_timer01;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a9";
+			reg = <0>;
+			//next-level-cache = <&L2>;
+		};
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00000000 0x01400000>; /* 20 MB */
+	};
+
+	gic: interrupt-controller@1e001000 {
+		compatible = "arm,cortex-a9-gic";
+		#interrupt-cells = <3>;
+		#address-cells = <0>;
+		interrupt-controller;
+		reg = <0x1e001000 0x1000>,
+		      <0x1e000100 0x100>;
+	};
+
+	motherboard {
+		compatible = "simple-bus";
+		#address-cells = <2>; /* SMB chipselect number and offset */
+		#size-cells = <1>;
+		#interrupt-cells = <1>;
+
+		ranges = <7 0 0x10000000 0x00020000>;
+
+		interrupt-map-mask = <0 0 63>;
+		interrupt-map = <0 0  0 &gic 0  0 4>,
+				<0 0  1 &gic 0  1 4>,
+				<0 0  2 &gic 0  2 4>,
+				<0 0  3 &gic 0  3 4>,
+				<0 0  4 &gic 0  4 4>,
+				<0 0  5 &gic 0  5 4>,
+				<0 0  6 &gic 0  6 4>,
+				<0 0  7 &gic 0  7 4>,
+				<0 0  8 &gic 0  8 4>,
+				<0 0  9 &gic 0  9 4>,
+				<0 0 10 &gic 0 10 4>,
+				<0 0 11 &gic 0 11 4>,
+				<0 0 12 &gic 0 12 4>,
+				<0 0 13 &gic 0 13 4>,
+				<0 0 14 &gic 0 14 4>,
+				<0 0 15 &gic 0 15 4>,
+				<0 0 16 &gic 0 16 4>,
+				<0 0 17 &gic 0 17 4>,
+				<0 0 18 &gic 0 18 4>,
+				<0 0 19 &gic 0 19 4>,
+				<0 0 20 &gic 0 20 4>,
+				<0 0 21 &gic 0 21 4>,
+				<0 0 22 &gic 0 22 4>,
+				<0 0 23 &gic 0 23 4>,
+				<0 0 24 &gic 0 24 4>,
+				<0 0 25 &gic 0 25 4>,
+				<0 0 26 &gic 0 26 4>,
+				<0 0 27 &gic 0 27 4>,
+				<0 0 28 &gic 0 28 4>,
+				<0 0 29 &gic 0 29 4>,
+				<0 0 30 &gic 0 30 4>,
+				<0 0 31 &gic 0 31 4>,
+				<0 0 32 &gic 0 32 4>,
+				<0 0 33 &gic 0 33 4>,
+				<0 0 34 &gic 0 34 4>,
+				<0 0 35 &gic 0 35 4>,
+				<0 0 36 &gic 0 36 4>,
+				<0 0 37 &gic 0 37 4>,
+				<0 0 38 &gic 0 38 4>,
+				<0 0 39 &gic 0 39 4>,
+				<0 0 40 &gic 0 40 4>,
+				<0 0 41 &gic 0 41 4>,
+				<0 0 42 &gic 0 42 4>;
+
+		iofpga@7,00000000 {
+			compatible = "arm,amba-bus", "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 7 0 0x20000>;
+
+			sysreg@00000 {
+				compatible = "arm,vexpress-sysreg";
+				reg = <0x00000 0x1000>;
+			};
+
+			sysctl@01000 {
+				compatible = "arm,sp810", "arm,primecell";
+				reg = <0x01000 0x1000>;
+			};
+
+			v2m_serial0: uart@09000 {
+				compatible = "arm,pl011", "arm,primecell";
+				reg = <0x09000 0x1000>;
+				interrupts = <5>;
+			};
+
+			v2m_timer01: timer@11000 {
+				compatible = "arm,sp804", "arm,primecell";
+				reg = <0x11000 0x1000>;
+				interrupts = <2>;
+			};
+		};
+	};
+};
