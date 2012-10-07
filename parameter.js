@@ -56,7 +56,7 @@ Configurations.prototype.dump = function(target) {
 function Parameters() {
     this.Image_url = 'Image-3.3.6';
     this.cmdline = 'rw root=/dev/ram0 console=ttyAMA0 earlyprintk';
-    this.initrd_url = 'initrd-3.3.6.cpio.lzo';
+    this.initrd_url = 'initramfs.cpio.lzo';
     this.initrd_size = 172285;
     this.initrd_decomp_size = 310784;
 
