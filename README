@@ -1,8 +1,8 @@
 arm-js
 ------
 
-It emulates ARMv7 and some peripherals of Vesertile Express.
-It can run Linux 3.3.8 and some user processes.
+It emulates ARMv7 and some peripherals of Versatile Express.
+It can run Linux 3.6.1 and some user processes.
 
 Get started
 -----------
