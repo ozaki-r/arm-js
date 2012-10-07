@@ -739,6 +739,55 @@ SP804.prototype.dump = function() {
 };
 
 /*
+ * PrimeXsys System Controller (SP810)
+ */
+function SystemController(baseaddr) {
+    this.baseaddr = baseaddr;
+
+    this.read = new Array();
+    this.data = new Array();
+
+    this.SYS_CTRL0 = this.baseaddr + 0x0000;
+    this.SYS_CTRL1 = this.baseaddr + 0xa000;
+
+    this.read[this.baseaddr + 0xfe0] = 0;
+    this.read[this.baseaddr + 0xfe4] = 0;
+    this.read[this.baseaddr + 0xfe8] = 0;
+    this.read[this.baseaddr + 0xfec] = 0;
+    this.read[this.baseaddr + 0xff0] = 0;
+    this.read[this.baseaddr + 0xff4] = 0;
+    this.read[this.baseaddr + 0xff8] = 0;
+    this.read[this.baseaddr + 0xffc] = 0;
+
+    var ctrl0 = 0;
+    ctrl0 = bitops.set_bit(ctrl0, 15, 1);
+    ctrl0 = bitops.set_bit(ctrl0, 17, 1);
+    ctrl0 = bitops.set_bit(ctrl0, 19, 1);
+    ctrl0 = bitops.set_bit(ctrl0, 21, 1);
+
+    var sysctrl = this;
+    this.data[this.SYS_CTRL0] = ctrl0;
+    this.read[this.SYS_CTRL0] = function() {
+        return sysctrl.data[sysctrl.SYS_CTRL0];
+    };
+    this.read[this.SYS_CTRL1] = 0;
+}
+
+SystemController.prototype.save = function() {
+    var params = new Object();
+    for (var i in this.data) {
+        params[i] = this.data[i];
+    }
+    return params;
+};
+
+SystemController.prototype.restore = function(params) {
+    for (var i in this.data) {
+        this.data[i] = params[i];
+    }
+};
+
+/*
  * I/O
  */
 function SystemIO(options) {
@@ -1651,10 +1700,12 @@ function VersatileExpress(configs, options) {
     this.io.register_io("UART1", this.uart1);
     this.io.register_io("UART2", this.uart2);
     this.io.register_io("UART3", this.uart3);
-    this.timer0 = new SP804(0x10001000, this.irq_base + 2, this.gic);
-    this.timer1 = new SP804(0x10011000, this.irq_base + 2, this.gic);
+    this.timer0 = new SP804(0x10011000, this.irq_base + 2, this.gic);
+    this.timer1 = new SP804(0x10012000, this.irq_base + 2, this.gic);
     this.io.register_io("SP804#0", this.timer0);
     this.io.register_io("SP804#1", this.timer1);
+    this.sysctrl = new SystemController(0x10001000);
+    this.io.register_io("SystemController", this.sysctrl);
 
     // Unimplemented Devices
     this.aaci = new UnimplementedDevice(0x10004000);
@@ -1739,6 +1790,7 @@ VersatileExpress.prototype.save = function() {
     params.uart1 = this.uart1.save();
     params.uart2 = this.uart2.save();
     params.uart3 = this.uart3.save();
+    params.sysctrl = this.sysctrl.save();
 
     var params_str = JSON.stringify(params);
     writeToFile("system.json", params_str, params_str.length, true);
@@ -1767,6 +1819,7 @@ VersatileExpress.prototype.restore = function() {
             system.uart2.restore(params.uart2);
             system.uart3.restore(params.uart3);
         }
+        system.sysctrl.restore(params.sysctrl);
 
         system.restore_memory();
         display.log("system restored");
