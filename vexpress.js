@@ -459,8 +459,8 @@ GenericInterruptController.prototype.send_interrupt = function(irq) {
 
 GenericInterruptController.prototype.pick_interrupt = function() {
     var irq = this.pending_interrupts.shift();
-    if (!irq)
-        throw "!irq";
+    if (irq === null)
+        throw "irq === null";
     //display.log(irq);
     this.sent_irqs.push(irq);
     return irq;
@@ -1333,7 +1333,7 @@ System.prototype.loop = function() {
             if (!suppress_interrupts &&
                 !cpu.cpsr.i && gic.is_pending()) {
                 var irq = gic.pick_interrupt();
-                if (irq) {
+                if (irq != null) {
                     this.n_interrupts += 1;
                     cpu.is_halted = false;
                     cpu.interrupt(irq);
