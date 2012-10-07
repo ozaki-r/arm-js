@@ -538,6 +538,15 @@ function SP804(baseaddr, irq, gic) {
 
     this.DIV = 10;
 
+    this.read[this.baseaddr + 0xfe0] = 0;
+    this.read[this.baseaddr + 0xfe4] = 0;
+    this.read[this.baseaddr + 0xfe8] = 0;
+    this.read[this.baseaddr + 0xfec] = 0;
+    this.read[this.baseaddr + 0xff0] = 0;
+    this.read[this.baseaddr + 0xff4] = 0;
+    this.read[this.baseaddr + 0xff8] = 0;
+    this.read[this.baseaddr + 0xffc] = 0;
+
     sp804 = this;
     // Load Register, TimerXLoad
     this.TimerXLoad1 = this.baseaddr;
