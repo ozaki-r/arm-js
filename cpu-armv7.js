@@ -2954,6 +2954,17 @@ CPU_ARMv7.prototype.sub_reg = function(inst, addr) {
     this.print_inst_reg(addr, inst, "sub", s, d, n, m, this.shift_t, this.shift_n);
 };
 
+CPU_ARMv7.prototype.sxtb = function(inst, addr) {
+    this.print_inst("SXTB", inst, addr);
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+
+    var rotated = this.ror(this.reg(m), rotation);
+    this.regs[d] = bitops.sign_extend(bitops.get_bits64(rotated, 7, 0), 8, 32);
+    this.print_inst_reg(addr, inst, "sxtb", null, d, null, m);
+};
+
 CPU_ARMv7.prototype.sxth = function(inst, addr) {
     this.print_inst("SXTH", inst, addr);
     var d = (inst >>> 12) & 0xf;
@@ -5344,7 +5355,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                                         a = bitops.get_bits(inst, 19, 16);
                                         if (a == 0xf) {
                                                 // SXTB
-                                                this.abort_not_impl("SXTB", inst, addr);
+                                                return "sxtb";
                                         } else {
                                                 // SXTAB
                                                 this.abort_not_impl("SXTAB", inst, addr);
