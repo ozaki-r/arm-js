@@ -2809,6 +2809,21 @@ CPU_ARMv7.prototype.rev = function(inst, addr) {
     this.print_inst_reg(addr, inst, "rev", null, d, null, m);
 };
 
+CPU_ARMv7.prototype.rev16 = function(inst, addr) {
+    this.print_inst("REV16", inst, addr);
+    var d = bitops.get_bits(inst, 15, 12);
+    var m = bitops.get_bits(inst, 3, 0);
+
+    var valm = this.reg(m);
+    var ret = 0;
+    ret = bitops.set_bits(ret, 31, 24, bitops.get_bits(valm, 23, 16));
+    ret = bitops.set_bits(ret, 23, 16, bitops.get_bits(valm, 31, 24));
+    ret = bitops.set_bits(ret, 15, 8, bitops.get_bits(valm, 7, 0));
+    ret = bitops.set_bits(ret, 7, 0, bitops.get_bits(valm, 15, 8));
+    this.regs[d] = ret;
+    this.print_inst_reg(addr, inst, "rev16", null, d, null, m);
+};
+
 CPU_ARMv7.prototype.rsb_reg = function(inst, addr) {
     this.print_inst("RSB (register)", inst, addr);
     var s = inst & 0x00100000;
@@ -5384,8 +5399,7 @@ CPU_ARMv7.prototype.decode_media = function(inst, addr) {
                                         break;
                                     case 5:
                                         // REV16
-                                        this.abort_not_impl("REV16", inst, addr);
-                                        break;
+                                        return "rev16";
                                     default:
                                         this.abort_unknown_inst(inst, addr);
                                         break;
