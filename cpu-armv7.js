@@ -6347,8 +6347,8 @@ CPU_ARM_MMU.prototype.dump_phymem = function(addr) {
     for (var i=0; i < 100; i++) {
         var cur = addr + i*4;
         var val = this.ld_word(cur);
-        if (val)
-            display.log(toStringHex32(cur) + ": " + toStringHex32(val));
+        if (val !== undefined && val !== null)
+            display.log(toStringHex32(cur) + ": " + toStringHex32(val) + "\t" + toStringAscii(val));
         else
             display.log(toStringHex32(cur) + ": (null)");
     }
@@ -6359,7 +6359,7 @@ CPU_ARM_MMU.prototype.dump_virmem = function(addr) {
         var cur = addr + i*4;
         var phyaddr = this.trans_to_phyaddr(cur);
         var val = this.ld_word(phyaddr);
-        if (val)
+        if (val !== undefined && val !== null)
             display.log(toStringHex32(phyaddr) + ": " + toStringHex32(val) + "\t" + toStringAscii(val));
         else
             display.log(toStringHex32(phyaddr) + ": (null)");
