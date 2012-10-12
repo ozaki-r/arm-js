@@ -999,12 +999,11 @@ function UART(id, baseaddr, irq, gic) {
         uart.data[uart.IMSC] = halfword;
     };
 
-    this.sending_rx_irq = false;
     this.read[this.MIS] = function() {
         var ret = 0;
         if (!uart.tx_fifo.length)
             ret += (1 << 5);
-        if (uart.sending_rx_irq)
+        if (uart.rx_fifo.length)
             ret += (1 << 4);
         //logger.log(uart.name + ": read MIS: " + ret);
         return ret;
@@ -1013,8 +1012,8 @@ function UART(id, baseaddr, irq, gic) {
     this.data[this.ICR] = 0;
     this.write[this.ICR] = function(halfword) {
         //logger.log(uart.name + ": write ICR: " + halfword.toString(16));
-        if (halfword & 0x10)
-            uart.sending_rx_irq = false;
+        //if (halfword & 0x10)
+        //    uart.sending_rx_irq = false;
         uart.data[uart.ICR] = halfword;
     };
 
@@ -1075,9 +1074,8 @@ UART.prototype.input_char = function(str) {
             setTimeout(function () {
                     if (uart.rx_fifo.length > 0)
                         uart.gic.send_interrupt(uart.irq);
-                }, 100);
+                }, 10);
         }
-        this.sending_rx_irq = true;
     }
 };
 
