@@ -1309,6 +1309,11 @@ function System(configs, options) {
     this.cpu = null;
     this.gic = null;
     this.uart0 = null;
+
+    this.N_CONTIGUOUS_EXECUTION = 10000;
+    // Chrome supports setTimeout with 1ms
+    this.PAUSE_PERIOD = 1;  // in ms
+    this.HALT_PERIOD = 10;  // in ms
 }
 
 System.prototype.load_binary = function(url, phyaddr, cb) {
@@ -1328,7 +1333,7 @@ System.prototype.run = function(system) {
         system.cpu.log_regs(null);
         system.cpu.print_pc(system.cpu.regs[15], null);
     }
-    setTimeout(system.loop.bind(system), 10);
+    setTimeout(system.loop.bind(system), system.PAUSE_PERIOD);
 };
 
 System.prototype.update_current_function_display = function() {
@@ -1363,12 +1368,12 @@ System.prototype.loop = function() {
     var cpu = this.cpu;
     var options = this.options;
     var gic = this.gic;
-    var timeout = 10;
+    var timeout = this.PAUSE_PERIOD;
     try {
         if (!this.is_running)
             return;
-        var timeslice = 1000;
-        var remained = 1000;
+        var timeslice = this.N_CONTIGUOUS_EXECUTION;
+        var remained = timeslice;
         if (options.enable_stopper && this.stop_after)
             remained = this.stop_after;
         var n_executed = 0;
@@ -1399,7 +1404,7 @@ System.prototype.loop = function() {
             }
             // See WFI instruction
             if (cpu.is_halted) {
-                timeout = 100;
+                timeout = this.HALT_PERIOD;
                 break;
             }
 
