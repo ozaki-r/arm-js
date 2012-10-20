@@ -1193,7 +1193,7 @@ function MemoryController(options, memory, io) {
 }
 
 MemoryController.prototype.ld_byte = function(addr) {
-    if (this.io.read[addr])
+    if (this.io.read[addr] !== undefined)
         return this.io.ld_byte(addr);
     //assert(addr < this.memory.size, "ld_byte: addr < this.memory.size: " + toStringHex32(addr));
     return this.memory.mem_byte[addr];
@@ -1201,7 +1201,7 @@ MemoryController.prototype.ld_byte = function(addr) {
 
 MemoryController.prototype.st_byte = function(addr, onebyte) {
     //assert(onebyte >= 0, "onebyte >= 0");
-    if (this.io.write[addr]) {
+    if (this.io.write[addr] !== undefined) {
         this.io.st_byte(addr, onebyte);
         return;
     }
@@ -1210,7 +1210,7 @@ MemoryController.prototype.st_byte = function(addr, onebyte) {
 };
 
 MemoryController.prototype.ld_halfword = function(addr) {
-    if (this.io.read[addr])
+    if (this.io.read[addr] !== undefined)
         return this.io.ld_halfword(addr);
     //assert(addr < this.memory.size, "ld_halfword: addr < this.memory.size: " + toStringHex32(addr));
     if (addr & 1)
@@ -1220,7 +1220,7 @@ MemoryController.prototype.ld_halfword = function(addr) {
 
 MemoryController.prototype.st_halfword = function(addr, halfword) {
     //assert(halfword >= 0, "halfword >= 0");
-    if (this.io.write[addr]) {
+    if (this.io.write[addr] !== undefined) {
         this.io.st_halfword(addr, halfword);
         return;
     }
@@ -1231,9 +1231,7 @@ MemoryController.prototype.st_halfword = function(addr, halfword) {
 };
 
 MemoryController.prototype.ld_word = function(addr) {
-    //if (this.io.read[addr])
-    // FIXME
-    if (addr >= 0x10000000)
+    if (this.io.read[addr] !== undefined)
         return this.io.ld_word(addr);
 
     //assert(addr < this.memory.size, "ld_word: addr < this.memory.size: " + toStringHex32(addr));
@@ -1248,7 +1246,7 @@ MemoryController.prototype.ld_word_fast = function(addr) {
 
 MemoryController.prototype.st_word = function(addr, word) {
     //assert(word >= 0, "word >= 0");
-    if (this.io.write[addr]) {
+    if (this.io.write[addr] !== undefined) {
         this.io.st_word(addr, word);
         return;
     }
@@ -1259,7 +1257,7 @@ MemoryController.prototype.st_word = function(addr, word) {
 
 MemoryController.prototype.st_word_unaligned = function(addr, word) {
     //assert(word >= 0, "word >= 0");
-    if (this.io.write[addr]) {
+    if (this.io.write[addr] !== undefined) {
         this.io.st_word(addr, word);
         return;
     }
