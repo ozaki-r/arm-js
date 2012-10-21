@@ -10,11 +10,20 @@ function errorHandler(e) {
   var msg = '';
 
   switch (e.code) {
+    case FileError.ENCODING_ERR:
+      msg = 'ENCODING_ERR';
+      break;
     case FileError.QUOTA_EXCEEDED_ERR:
       msg = 'QUOTA_EXCEEDED_ERR';
       break;
     case FileError.NOT_FOUND_ERR:
       msg = 'NOT_FOUND_ERR';
+      break;
+    case FileError.NOT_READABLE_ERR:
+      msg = 'NOT_READABLE_ERR';
+      break;
+    case FileError.NO_MODIFICATION_ALLOWED_ERR:
+      msg = 'NO_MODIFICATION_ALLOWED_ERR';
       break;
     case FileError.SECURITY_ERR:
       msg = 'SECURITY_ERR';
@@ -24,6 +33,12 @@ function errorHandler(e) {
       break;
     case FileError.INVALID_STATE_ERR:
       msg = 'INVALID_STATE_ERR';
+      break;
+    case FileError.TYPE_MISMATCH_ERR:
+      msg = 'TYPE_MISMATCH_ERR';
+      break;
+    case FileError.PATH_EXISTS_ERR:
+      msg = 'PATH_EXISTS_ERR';
       break;
     default:
       msg = 'Unknown Error';
@@ -110,4 +125,71 @@ function readFromFile(name, size, handler, is_text) {
     }
 
     window.requestFileSystem(window.PERSISTENT, size, onInitFs, errorHandler);
+}
+
+function createDirectory(path, handler) {
+    function onInitFs(fs) {
+        fs.root.getDirectory(path, {create: true}, function(dirEntry) {
+            if (handler)
+                handler(dirEntry);
+        }, errorHandler);
+    }
+
+    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
+}
+
+function getDirectory(path, handler, errcb) {
+    function onInitFs(fs) {
+        fs.root.getDirectory(path, {}, function(dirEntry) {
+            if (handler)
+                handler(dirEntry);
+        }, errcb ? errcb : errorHandler);
+    }
+
+    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
+}
+
+function createFile(path, handler) {
+    function onInitFs(fs) {
+        fs.root.getFile(path, {create: true}, function(fileEntry) {
+            if (handler)
+                handler(fileEntry);
+        }, errorHandler);
+    }
+
+    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
+}
+
+function getFile(path, handler, errcb) {
+    function onInitFs(fs) {
+        fs.root.getFile(path, {}, function(fileEntry) {
+            if (handler)
+                handler(fileEntry);
+        }, errcb ? errcb : errorHandler);
+    }
+
+    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
+}
+
+function toArray(list) {
+    return Array.prototype.slice.call(list || [], 0);
+}
+
+function readDirectoryEntries(dirEntry, handler) {
+    var dirReader = dirEntry.createReader();
+    var entries = [];
+
+    // Call the reader.readEntries() until no more results are returned.
+    var readEntries = function() {
+        dirReader.readEntries (function(results) {
+            if (results.length === 0) {
+                handler(entries.sort());
+            } else {
+                entries = entries.concat(toArray(results));
+                readEntries();
+            }
+        }, errorHandler);
+    };
+
+    readEntries(); // Start reading dirs.
 }

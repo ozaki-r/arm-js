@@ -1199,6 +1199,10 @@ MemoryController.prototype.ld_byte = function(addr) {
     return this.memory.mem_byte[addr];
 };
 
+MemoryController.prototype.ld_byte_fast = function(addr) {
+    return this.memory.mem_byte[addr];
+};
+
 MemoryController.prototype.st_byte = function(addr, onebyte) {
     //assert(onebyte >= 0, "onebyte >= 0");
     if (this.io.write[addr] !== undefined) {
@@ -1206,6 +1210,10 @@ MemoryController.prototype.st_byte = function(addr, onebyte) {
         return;
     }
     //assert(addr < this.memory.size, "st_byte: addr < this.memory.size: " + toStringHex32(addr));
+    this.memory.mem_byte[addr] = onebyte;
+};
+
+MemoryController.prototype.st_byte_fast = function(addr, onebyte) {
     this.memory.mem_byte[addr] = onebyte;
 };
 
@@ -1218,6 +1226,10 @@ MemoryController.prototype.ld_halfword = function(addr) {
     return this.memory.mem_halfword[addr >> 1];
 };
 
+MemoryController.prototype.ld_halfword_fast = function(addr) {
+    return this.memory.mem_halfword[addr >> 1];
+};
+
 MemoryController.prototype.st_halfword = function(addr, halfword) {
     //assert(halfword >= 0, "halfword >= 0");
     if (this.io.write[addr] !== undefined) {
@@ -1227,6 +1239,10 @@ MemoryController.prototype.st_halfword = function(addr, halfword) {
     //assert(addr < this.memory.size, "st_halfword: addr < this.memory.size" + toStringHex32(addr));
     if (addr & 1)
         throw "st_halfword: alignment error!";
+    this.memory.mem_halfword[addr >> 1] = halfword;
+};
+
+MemoryController.prototype.st_halfword_fast = function(addr, halfword) {
     this.memory.mem_halfword[addr >> 1] = halfword;
 };
 
@@ -1252,6 +1268,10 @@ MemoryController.prototype.st_word = function(addr, word) {
     }
 
     //assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+    this.memory.mem_word[addr >>> 2] = word;
+};
+
+MemoryController.prototype.st_word_fast = function(addr, word) {
     this.memory.mem_word[addr >>> 2] = word;
 };
 
@@ -1712,6 +1732,13 @@ function VersatileExpress(configs, options) {
     this.sysctrl = new SystemController(0x10001000);
     this.io.register_io("SystemController", this.sysctrl);
 
+    // Virtio 9P
+    this.virtio_mmio = new VirtioMMIO(0x10015000, this.irq_base + 15, this.gic);
+    this.virtio_mmio.register_tagname("armjs");
+    this.io.register_io("VirtioMMIO", this.virtio_mmio);
+    this.virtio_vring = new VirtioVring(this.memctlr, this.virtio_mmio);
+    this.virtio_9p = new Virtio9P(this.memctlr, this.virtio_vring);
+
     // Unimplemented Devices
     this.aaci = new UnimplementedDevice(0x10004000);
     this.io.register_io("AACI", this.aaci);
@@ -1793,6 +1820,7 @@ VersatileExpress.prototype.save = function() {
     params.timer0 = this.timer0.save();
     params.uart0 = this.uart0.save();
     params.sysctrl = this.sysctrl.save();
+    params.virtio_mmio = this.virtio_mmio.save();
 
     var params_str = JSON.stringify(params);
     writeToFile("system.json", params_str, params_str.length, true);
@@ -1814,6 +1842,7 @@ VersatileExpress.prototype.restore = function() {
         system.timer0.restore(params.timer0);
         system.uart0.restore(params.uart0);
         system.sysctrl.restore(params.sysctrl);
+        system.virtio_mmio.restore(params.virtio_mmio);
 
         system.restore_memory();
         display.log("system restored");
