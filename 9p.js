@@ -170,9 +170,6 @@ FS9P.prototype.remove = function(path, callback) {
 
 FS9P.prototype.rename = function(dir, oldname, newname, callback) {
     var path = [dir.fullPath, oldname].join("/");
-    console.log(path);
-    console.log(oldname);
-    console.log(newname);
     this.get(path, function(entry) {
         entry.moveTo(dir, newname, function() {
             callback();
