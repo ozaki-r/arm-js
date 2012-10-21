@@ -92,3 +92,17 @@ function toStringAscii(uint) {
     return ret;
 }
 
+function abort(str) {
+    throw str;
+}
+
+function stringToLong(str) {
+    if (str.length != 4)
+        abort("String.toLong: string too long: " + str.length + " > 4");
+    var ret = 0;
+    ret += str.charCodeAt(3) << 24;
+    ret += str.charCodeAt(2) << 16;
+    ret += str.charCodeAt(1) << 8;
+    ret += str.charCodeAt(0);
+    return ret;
+};
