@@ -82,12 +82,10 @@ function writeToFile(name, data, size, is_text) {
             console.log('Write failed: ' + e.toString());
           };
 
-          var bb = new window.WebKitBlobBuilder();
-          bb.append(data);
           if (is_text)
-              fileWriter.write(bb.getBlob("text/plain"));
+              fileWriter.write(new Blob([data], {type: "text/plain"}));
           else
-              fileWriter.write(bb.getBlob("example/binary"));
+              fileWriter.write(new Blob([data], {type: "example/binary"}));
 
         }, errorHandler);
       }, errorHandler);
