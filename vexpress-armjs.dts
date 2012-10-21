@@ -132,6 +132,12 @@
 				reg = <0x11000 0x1000>;
 				interrupts = <2>;
 			};
+
+			virtio_9p@15000 {
+				compatible = "virtio,mmio";
+				reg = <0x15000 0x100>;
+				interrupts = <15>;
+			};
 		};
 	};
 };
