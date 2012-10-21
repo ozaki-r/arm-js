@@ -57,7 +57,7 @@ function Parameters() {
     this.Image_url = 'Image-3.6.1';
     this.cmdline = 'rw root=/dev/ram0 console=ttyAMA0 earlyprintk';
     this.initrd_url = 'initramfs.cpio.lzo';
-    this.initrd_size = 172285;
+    this.initrd_size = 172428;
     this.initrd_decomp_size = 310784;
     this.dtb_url = 'vexpress-armjs.dtb';
 
