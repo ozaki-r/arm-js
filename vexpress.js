@@ -1607,7 +1607,8 @@ System.prototype.restart = function() {
 
 System.prototype.save_memory = function() {
     display.log("saving whole memory to a file");
-    writeToFile("mem.dat", this.memory.mem, this.memory.size, false);
+    // Have to pass ArrayBufferView, not ArrayBuffer (deprecated)
+    writeToFile("mem.dat", this.memory.mem_byte, this.memory.size, false);
 };
 
 System.prototype.restore_memory = function() {
