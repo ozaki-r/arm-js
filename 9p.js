@@ -126,9 +126,8 @@ FS9P.prototype.write = function(path, offset, buffer, callback) {
             };
 
             fileWriter.seek(offset);
-            var bb = new window.BlobBuilder();
-            bb.append(buffer);
-            fileWriter.write(bb.getBlob());
+            var view = new Uint8Array(buffer);
+            fileWriter.write(new Blob([view]));
         });
     });
 };
