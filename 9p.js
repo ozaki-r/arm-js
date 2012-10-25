@@ -10,15 +10,14 @@ function FS9P() {
 }
 
 FS9P.prototype.initFileSystem = function() {
-    createDirectory(this.root);
-};
-
-FS9P.prototype.readdir = function(path, callback) {
-    readDirectoryEntries(path, callback);
+    createDirectory(null, this.root);
 };
 
 FS9P.prototype.get_dir = function(path, callback) {
-    getDirectory(path, function(entry) {
+};
+
+FS9P.prototype.get_root = function(callback) {
+    getDirectory(null, this.root, function(entry) {
         entry.getMetadata(function(metadata) {
             entry.size = metadata.size;
             entry.mtime = metadata.modificationTime;
@@ -49,8 +48,8 @@ FS9P.prototype.get_dir_entries = function(dirEntry, callback) {
     });
 };
 
-FS9P.prototype.create_file = function(path, callback) {
-    createFile(path, function(entry) {
+FS9P.prototype.create_file = function(parent, name, callback) {
+    createFile(parent, name, function(entry) {
         entry.getMetadata(function(metadata) {
             entry.size = metadata.size;
             entry.mtime = metadata.modificationTime;
@@ -59,8 +58,8 @@ FS9P.prototype.create_file = function(path, callback) {
     });
 };
 
-FS9P.prototype.create_dir = function(path, callback) {
-    createDirectory(path, function(entry) {
+FS9P.prototype.create_dir = function(parent, name, callback) {
+    createDirectory(parent, name, function(entry) {
         entry.getMetadata(function(metadata) {
             entry.size = metadata.size;
             entry.mtime = metadata.modificationTime;
@@ -69,20 +68,7 @@ FS9P.prototype.create_dir = function(path, callback) {
     });
 };
 
-FS9P.prototype.get_file = function(path, callback, errcb) {
-    getFile(path, function(entry) {
-        entry.getMetadata(function(metadata) {
-            entry.size = metadata.size;
-            entry.mtime = metadata.modificationTime;
-            callback(entry);
-        });
-    }, function(e) {
-        errorHandler(e);
-        errcb(e);
-    });
-};
-
-FS9P.prototype.get = function(path, callback, errcb) {
+FS9P.prototype.get = function(parent, name, callback, errcb) {
     var _callback = function(entry) {
         entry.getMetadata(function(metadata) {
             entry.size = metadata.size;
@@ -90,9 +76,9 @@ FS9P.prototype.get = function(path, callback, errcb) {
             callback(entry);
         });
     };
-    getFile(path, _callback, function(e) {
+    getFile(parent, name, _callback, function(e) {
         if (e.code == FileError.TYPE_MISMATCH_ERR) {
-            getDirectory(path, _callback);
+            getDirectory(parent, name, _callback);
         } else {
             errorHandler(e);
             if (errcb)
@@ -101,76 +87,64 @@ FS9P.prototype.get = function(path, callback, errcb) {
     });
 };
 
-FS9P.prototype.get_root = function(callback) {
-    this.get_dir(this.root, callback);
-};
-
-FS9P.prototype.truncate = function(path, callback) {
-    getFile(path, function(entry) {
-        entry.createWriter(function(fileWriter) {
-            fileWriter.truncate(0);
-            callback();
-        });
+FS9P.prototype.truncate = function(entry, callback) {
+    entry.createWriter(function(fileWriter) {
+        fileWriter.truncate(0);
+        callback(entry);
     });
 };
 
-FS9P.prototype.write = function(path, offset, buffer, callback) {
-    getFile(path, function(entry) {
-        entry.createWriter(function(fileWriter) {
-            fileWriter.onwriteend = function(e) {
-                callback(entry);
-            };
+FS9P.prototype.write = function(entry, offset, buffer, callback) {
+    entry.createWriter(function(fileWriter) {
+        fileWriter.onwriteend = function(e) {
+            callback(entry);
+        };
 
-            fileWriter.onerror = function(e) {
-                console.log('Write failed: ' + e.toString());
-            };
+        fileWriter.onerror = function(e) {
+            console.log('Write failed: ' + e.toString());
+        };
 
-            fileWriter.seek(offset);
-            var view = new Uint8Array(buffer);
-            fileWriter.write(new Blob([view]));
-        });
+        fileWriter.seek(offset);
+        var view = new Uint8Array(buffer);
+        fileWriter.write(new Blob([view]));
     });
 };
 
-FS9P.prototype.read = function(path, offset, count, callback) {
-    getFile(path, function(entry) {
-        entry.file(function(file) {
-            var fileReader = new FileReader();
-            fileReader.onloadend = function(e) {
-                var ret = [];
-                var buffer = this.result;
+FS9P.prototype.read = function(entry, offset, count, callback) {
+    entry.file(function(file) {
+        var fileReader = new FileReader();
+        fileReader.onloadend = function(e) {
+            var ret = [];
+            var buffer = this.result;
 
-                if (offset > buffer.byteLength)
-                    callback([]);
+            if (offset > buffer.byteLength)
+                callback([]);
 
-                var size = buffer.byteLength < count ? buffer.byteLength : count;
-                if ((size + offset) > buffer.byteLength)
-                    size = buffer.byteLength - offset;
-                var data = new Uint8Array(buffer, offset, size);
-                for (var i=0; i < size; i++)
-                    ret.push(data[i]);
-                callback(ret);
-            };
-            fileReader.readAsArrayBuffer(file);
-        });
+            var size = buffer.byteLength < count ? buffer.byteLength : count;
+            if ((size + offset) > buffer.byteLength)
+                size = buffer.byteLength - offset;
+            var data = new Uint8Array(buffer, offset, size);
+            for (var i=0; i < size; i++)
+                ret.push(data[i]);
+            callback(ret);
+        };
+        fileReader.readAsArrayBuffer(file);
     });
 };
 
-FS9P.prototype.remove = function(path, callback) {
-    this.get(path, function(entry) {
-        entry.remove(function() {
-            callback();
-        }, function(e) {
-            // FIXME when directory is not empty
-            errorHandler(e);
-            callback();
-        });
+FS9P.prototype.remove = function(entry, callback) {
+    entry.remove(function() {
+        callback();
+    }, function(e) {
+        // FIXME when directory is not empty
+        errorHandler(e);
+        callback();
     });
 };
 
 FS9P.prototype.rename = function(dir, oldname, newname, callback) {
-    var path = [dir.fullPath, oldname].join("/");
-    this.get(path, function(entry) {
+    //var path = [dir.fullPath, oldname].join("/");
+    this.get(dir, oldname, function(entry) {
         entry.moveTo(dir, newname, function() {
             callback();
         }, function(e) {
@@ -193,20 +167,31 @@ function Protocol9P2000u(net9p) {
     this.IOUNIT = 4096;
     this.TERROR = 106;
     this.HEADER_SIZE = 4 + 1 + 2;  // size + id + tag
+
     this.msize = 0;
     this.fid2qid = {};
-    this.qidpath2fspath = {};
     this.fspath2qid = {};
 }
 
-Protocol9P2000u.prototype.add_qid = function(fid, qid, path) {
+Protocol9P2000u.prototype.add_qid = function(fid, qid) {
+    //display.log("Adding fid=" + fid + ", name=" + qid.name + ", fullPath=" + qid.entry.fullPath);
     this.fid2qid[fid] = qid;
-    this.qidpath2fspath[qid.path] = path;
-    this.fspath2qid[path] = qid;
+    this.fspath2qid[qid.fullPath] = qid;
 };
 
-Protocol9P2000u.prototype.get_qid = function(path) {
-    return this.fspath2qid[path];
+Protocol9P2000u.prototype.del_qid = function(fid) {
+    var qid = this.fid2qid[fid];
+    delete this.fid2qid[fid];
+    delete this.fspath2qid[qid.fullPath];
+};
+
+Protocol9P2000u.prototype.get_qid = function(fid_or_path) {
+    if (typeof fid_or_path == "number")
+        return this.fid2qid[fid_or_path];
+    else if (typeof fid_or_path == "string")
+        return this.fspath2qid[fid_or_path];
+    else
+        abort("get_qid: unknown key type: " + (typeof fid_or_path));
 };
 
 Protocol9P2000u.prototype.build_reply = function(id, tag, payload) {
@@ -238,17 +223,24 @@ Protocol9P2000u.prototype.attach = function(id, tag, next_data) {
 
     // Return root directory's QID
     var net9p = this.net9p;
+    var that = this;
     net9p.fs.get_root(function(entry) {
         var qid = {
             type: 0x10 | 0x80,  // mount point & directory
             version: entry.mtime.getTime(),
-            path: net9p.hashCode32(entry.fullPath)
+            path: net9p.hashCode32(entry.fullPath),
+            name: "/",
+            entry: entry,  // include fullPath and mtime
+            atime: (new Date()).getTime(),  // updated by attach
+            parent: null
         };
+        qid.parent = qid;  // fake
+        display.log("[attach] fullPath=" + entry.fullPath);
 
-        net9p.proto.add_qid(fid, qid, net9p.fs.root);
+        that.add_qid(fid, qid);
 
         var payload = net9p.marshal(["Q"], [qid]);
-        var reply = net9p.proto.build_reply(id, tag, payload);
+        var reply = that.build_reply(id, tag, payload);
         net9p.send_reply(reply);
     });
     return null;
@@ -259,16 +251,16 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
     // path elements ["root", "dir1", "dir2",...]
     var req = this.net9p.unmarshal(["w", "w", "h"], next_data);
     var fid = req[0];
-    var nwfid = req[1];  // afid is used for auth. virtio_9p doesn't use it.
+    var nwfid = req[1];  // afid is used for auth. arm-js doesn't use it.
     var nwname = req[2];
     display.log("[walk] fid=" + fid + ", nwfid=" + nwfid + ", nwname=" + nwname);
 
-    var pqid = this.net9p.proto.fid2qid[fid];
-    if (!pqid)
+    var qid = this.get_qid(fid);
+    if (!qid)
         abort("No such QID found for fid=" + fid);
 
     if (nwname === 0) {
-        this.net9p.proto.fid2qid[nwfid] = pqid;
+        this.add_qid(nwfid, qid);
 
         var payload = this.net9p.marshal(["h"], [0]);
         return this.build_reply(id, tag, payload);
@@ -278,57 +270,70 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
     for (var i=0; i < nwname; i++) {
         wnames.push(this.net9p.unmarshal(["s"], next_data));
     }
+    display.log("[walk] wnames=[" + wnames.toString() + "]");
 
-    var pqid = this.net9p.proto.fid2qid[fid];
-    var fullpath = [this.qidpath2fspath[pqid.path], wnames[nwname - 1]].join("/");
+    display.log("[walk] path=" + qid.entry.fullPath);
 
-    if (nwname == 1) {
-        var net9p = this.net9p;
-        display.log("[walk] path=" + fullpath);
-        net9p.fs.get(fullpath, function(entry) {
-            var qid = {
-                type: (entry.isDirectory ? 0x80 : 0),
-                version: entry.mtime.getTime(),
-                path: net9p.hashCode32(entry.fullPath)
-            };
+    ret_qids = [];
+    var net9p = this.net9p;
+    var that = this;
+    var walk = function(pqid, names) {
+        var name = names[0];
 
-            net9p.proto.add_qid(nwfid, qid, entry.fullPath);
+        if (name) {
+            display.log("[walk] walking: " + name);
+            net9p.fs.get(pqid.entry, name, function(entry) {
+                var _qid = {
+                    type: (entry.isDirectory ? 0x80 : 0),
+                    version: entry.mtime.getTime(),
+                    path: net9p.hashCode32(entry.fullPath),
+                    name: entry.name,
+                    entry: entry,  // include fullPath and mtime
+                    atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
+                    parent: pqid
+                };
 
-            var payload = net9p.marshal(["h", "Q"], [1, qid]);
-            var reply = net9p.proto.build_reply(id, tag, payload);
+                ret_qids.push(_qid);
+
+                walk(_qid, names.slice(1));
+            }, function(e) {
+                // FIXME: have to check error code
+                if (names == wnames) {
+                    var payload = net9p.marshal(["s", "w"], ["No such file or directory", 2]);
+                    var reply = that.build_reply(that.TERROR, tag, payload);
+                } else {
+                    // Return walked QIDs
+                    var types = ["h"];
+                    var data = [ret_qids.length];
+                    for (var i in ret_qids) {
+                        types.push("Q");
+                        types.push(ret_qids[i]);
+                    }
+                    var payload = net9p.marshal(types, data);
+                    var reply = that.build_reply(id, tag, payload);
+                }
+                net9p.send_reply(reply);
+            });
+        } else {
+            // Walked sucessfully
+            that.add_qid(nwfid, ret_qids[ret_qids.length - 1]);
+
+            // Return walked QIDs
+            var types = ["h"];
+            var data = [ret_qids.length];
+            for (var i in ret_qids) {
+                types.push("Q");
+                data.push(ret_qids[i]);
+            }
+            var payload = net9p.marshal(types, data);
+            var reply = that.build_reply(id, tag, payload);
             net9p.send_reply(reply);
-
-        }, function(e) {
-            // FIXME
-            var payload = net9p.marshal(["s", "w"], ["No such file or directory", 2]);
-            var reply = net9p.proto.build_reply(net9p.proto.TERROR, tag, payload);
-            net9p.send_reply(reply);
-        });
-
-        return null;
-    }
-
-    abort("walk: nwname=" + nwame);
-
-    var qid = {
-        type: 0,  // file
-        version: (new Date()).getTime(),
-        path: this.net9p.hashCode32(fullpath)
+        }
     };
 
-    this.add_qid(nwfid, qid, fullPath);
+    walk(qid, wnames);
 
-    // Return QIDs of the path elements
-    var types = ["h"];
-    for (var i=0; i < nwname; i++) {
-        types.push("Q");
-    }
-
-    var data = [nwname];
-    data.push(qid);   // FIXME
-
-    var payload = this.net9p.marshal(types, data);
-    return this.build_reply(id, tag, payload);
+    return null;
 };
 Protocol9P2000u.prototype[110] = Protocol9P2000u.prototype.walk;
 
@@ -338,19 +343,21 @@ Protocol9P2000u.prototype.open = function(id, tag, next_data) {
     var mode = req[1];
     display.log("[open] fid=" + fid + ", mode=" + mode.toString(16));
 
-    var qid = this.net9p.proto.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
+        abort("[open] No such QID found for fid=" + fid);
 
     if (mode & 0x10) {
         var net9p = this.net9p;
-        net9p.fs.truncate(path, function() {
+        var that = this;
+        net9p.fs.truncate(qid.entry, function(entry) {
+            // Update
+            qid.entry = entry;
+            qid.version = entry.mtime.getTime();
+            qid.atime = (new Date()).getTime();
+
             var payload = net9p.marshal(["Q", "w"], [qid, this.IOUNIT]);
-            var reply = net9p.proto.build_reply(id, tag, payload);
+            var reply = that.build_reply(id, tag, payload);
             net9p.send_reply(reply);
         });
         return null;
@@ -365,60 +372,60 @@ Protocol9P2000u.prototype.create = function(id, tag, next_data) {
     var req = this.net9p.unmarshal(["w", "s", "w", "b", "s"], next_data);
     var fid = req[0];
     var name = req[1];
-    /*
-    var perm0 = req[2];
-    var perm1 = req[3];
-    var mode = req[4];
-    var extension = req[5];
-    var perm = perm0.toString(16) + ":" + perm1.toString(16);
-    */
     var perm = req[2];
     var mode = req[3];
     var extension = req[4];
     display.log("[create] fid=" + fid + ", name=" + name + ", perm=" + perm.toString(16)
                 + ", mode=" + mode.toString(2) + ", extension=" + extension);
 
-    var pqid = this.net9p.proto.fid2qid[fid];
-    if (!pqid)
-        abort("No such QID found for fid=" + fid);
-
-    var fullpath = [this.qidpath2fspath[pqid.path], name].join("/");
+    var qid = this.get_qid(fid);
+    if (!qid)
+        abort("[create] No such QID found for fid=" + fid);
 
     var net9p = this.net9p;
+    var that = this;
     if (perm & 0x80000000) {  // directory
-        net9p.fs.create_dir(fullpath, function(entry) {
+        net9p.fs.create_dir(qid.entry, name, function(entry) {
             if (!entry.isDirectory)
                 abort("file created for directory creation");
+            display.log("[create][dir] fullPath=" + entry.fullPath);
 
-            var qid = {
+            var cqid = {
                 type: 0,
                 version: entry.mtime.getTime(),
-                path: net9p.hashCode32(entry.fullPath)
+                path: net9p.hashCode32(entry.fullPath),
+                name: entry.name,
+                entry: entry,  // include fullPath and mtime
+                atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
+                parent: qid
             };
+            that.add_qid(fid, cqid);
+            qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
 
-            net9p.proto.fid2qid[fid] = qid;
-            net9p.proto.qidpath2fspath[qid.path] = entry.fullPath;
-
-            var payload = net9p.marshal(["Q", "w"], [qid, net9p.proto.IOUNIT]);
-            var reply = net9p.proto.build_reply(id, tag, payload);
+            var payload = net9p.marshal(["Q", "w"], [cqid, that.IOUNIT]);
+            var reply = that.build_reply(id, tag, payload);
             net9p.send_reply(reply);
         });
     } else {  // file
-        net9p.fs.create_file(fullpath, function(entry) {
+        net9p.fs.create_file(qid.entry, name, function(entry) {
             if (entry.isDirectory)
                 abort("dir created for file creation");
+            display.log("[create][file] fullPath=" + entry.fullPath);
 
-            var qid = {
+            var cqid = {
                 type: 0x80,
                 version: entry.mtime.getTime(),
-                path: net9p.hashCode32(entry.fullPath)
+                path: net9p.hashCode32(entry.fullPath),
+                name: entry.name,
+                entry: entry,  // include fullPath and mtime
+                atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
+                parent: qid
             };
+            that.add_qid(fid, cqid);
+            qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
 
-            net9p.proto.fid2qid[fid] = qid;
-            net9p.proto.qidpath2fspath[qid.path] = entry.fullPath;
-
-            var payload = net9p.marshal(["Q", "w"], [qid, net9p.proto.IOUNIT]);
-            var reply = net9p.proto.build_reply(id, tag, payload);
+            var payload = net9p.marshal(["Q", "w"], [cqid, that.IOUNIT]);
+            var reply = that.build_reply(id, tag, payload);
             net9p.send_reply(reply);
         });
     }
@@ -427,73 +434,70 @@ Protocol9P2000u.prototype.create = function(id, tag, next_data) {
 };
 Protocol9P2000u.prototype[114] = Protocol9P2000u.prototype.create;
 
+Protocol9P2000u.prototype.read_directory = function(qid, offset, entries) {
+    var atime = qid.atime;
+    var mtime = qid.entry.mtime.getTime();
+    var data = this.build_stat(".", 0, qid, atime, mtime);
+
+    atime = qid.parent.atime;
+    mtime = qid.parent.entry.mtime.getTime();
+    data = data.concat(this.build_stat("..", 0, qid.parent, atime, mtime));
+
+    for (var i in entries) {
+        var ent = entries[i];
+        display.log("[read] name=" + ent.name);
+        var cqid = this.get_qid(ent.fullPath);
+        mtime = ent.mtime.getTime();
+        if (!cqid) {
+            cqid = {
+                type: (ent.isDirectory ? 0x80 : 0),
+                version: mtime,
+                path: this.net9p.hashCode32(ent.fullPath)
+            };
+        }
+        var stat = this.build_stat(ent.name, ent.size, cqid, atime, mtime);
+        data = data.concat(stat);
+    }
+
+    if (offset)
+        data = data.slice(offset);
+
+    var count = this.net9p.marshal(["w"], [data.length]);
+    display.log("[read] count=" + data.length);
+    return count.concat(data);
+};
+
 Protocol9P2000u.prototype.read = function(id, tag, next_data) {
     var req = this.net9p.unmarshal(["w", "w", "w", "w"], next_data);
     var fid = req[0];
     var offset = req[1];
-    //var offset = req[2];
+    //var offset = req[2];  // FIXME
     var count = req[3];
     display.log("[read] fid=" + fid + ", offset=" + offset + ", count=" + count);
 
-    var qid = this.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
+        abort("[read] No such QID found for fid=" + fid);
 
+    var net9p = this.net9p;
+    var that = this;
     if (qid.type & 0x80) {  // directory
-        var net9p = this.net9p;
-        net9p.fs.get_dir(path, function(entry) {
-            if (!entry.isDirectory)
-                abort("[read] get_dir for file");
+        display.log("[read] reading directory: " + qid.entry.fullPath);
+        net9p.fs.get_dir_entries(qid.entry, function(entries) {
+            qid.atime = (new Date()).getTime();
 
-            net9p.fs.get_dir_entries(entry, function(entries) {
-                // FIXME non-root
-                var name = path.replace(net9p.fs.root, "");
-                if (name == "")
-                    name = "/";
-                var atime = (new Date()).getTime();
-                var mtime = entry.mtime.getTime();
-
-                var data = net9p.proto.build_stat(".", 0, qid, atime, mtime);
-                if (name == "/")
-                    data = data.concat(net9p.proto.build_stat("..", 0, qid, atime, mtime));
-                else
-                    abort(".. for non-root directory");
-
-                for (var i in entries) {
-                    var ent = entries[i];
-                    var cqid = net9p.proto.get_qid(ent.fullPath);
-                    mtime = ent.mtime.getTime();
-                    if (!cqid) {
-                        cqid = {
-                            type: (ent.isDirectory ? 0x80 : 0),
-                            version: mtime,
-                            path: net9p.hashCode32(ent.fullPath)
-                        };
-                    }
-                    var stat = net9p.proto.build_stat(ent.name, ent.size, cqid, atime, mtime);
-                    data = data.concat(stat);
-                }
-
-                if (offset)
-                    data = data.slice(offset);
-
-                var count = net9p.marshal(["w"], [data.length]);
-                display.log("[read] count=" + data.length);
-                var payload = count.concat(data);
-                var reply = net9p.proto.build_reply(id, tag, payload);
-                net9p.send_reply(reply);
-            });
+            var payload = that.read_directory(qid, offset, entries);
+            var reply = that.build_reply(id, tag, payload);
+            net9p.send_reply(reply);
         });
     } else {  // file
-        var net9p = this.net9p;
-        net9p.fs.read(path, offset, count, function(data) {
+        net9p.fs.read(qid.entry, offset, count, function(data) {
+            qid.atime = (new Date()).getTime();
+
             var count = net9p.marshal(["w"], [data.length]);
             display.log("[read] count=" + data.length);
             var payload = count.concat(data);
-            var reply = net9p.proto.build_reply(id, tag, payload);
+            var reply = that.build_reply(id, tag, payload);
             net9p.send_reply(reply);
         });
     }
@@ -508,14 +512,12 @@ Protocol9P2000u.prototype.write = function(id, tag, next_data) {
     //var offset = req[2];
     var count = req[3];
 
-    var qid = this.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
+        abort("[write] No such QID found for fid=" + fid);
 
-    display.log("[write] fid=" + fid + ", offset=" + offset + ", count=" + count + ", path=" + path);
+    display.log("[write] fid=" + fid + ", offset=" + offset
+                + ", count=" + count + ", fullPath=" + qid.entry.path);
 
     var buffer = new ArrayBuffer(count);
     var data = new Uint8Array(buffer, 0, count);
@@ -523,10 +525,14 @@ Protocol9P2000u.prototype.write = function(id, tag, next_data) {
         data[i] = next_data();
 
     var net9p = this.net9p;
-    net9p.fs.write(path, offset, buffer, function(e) {
+    var that = this;
+    net9p.fs.write(qid.entry, offset, buffer, function(entry) {
+        qid.entry = entry;
+        qid.atime = (new Date()).getTime();
+
         var payload = net9p.marshal(["w"], [data.byteLength]);
         display.log("[write] count=" + data.byteLength);
-        var reply = net9p.proto.build_reply(id, tag, payload);
+        var reply = that.build_reply(id, tag, payload);
         net9p.send_reply(reply);
     });
     return null;
@@ -538,7 +544,7 @@ Protocol9P2000u.prototype.clunk = function(id, tag, next_data) {
     var fid = req[0];
     display.log("[clunk] fid=" + fid);
 
-    delete this.net9p.proto.fid2qid[fid];
+    this.del_qid(fid);
 
     return this.build_reply(id, tag, []);
 };
@@ -548,21 +554,20 @@ Protocol9P2000u.prototype.remove = function(id, tag, next_data) {
     var req = this.net9p.unmarshal(["w"], next_data);
     var fid = req[0];
 
-    var qid = this.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
+        abort("[remove] No such QID found for fid=" + fid);
 
     display.log("[remove] fid=" + fid);
 
     var net9p = this.net9p;
-    net9p.fs.remove(path, function() {
+    var that = this;
+    net9p.fs.remove(qid.entry, function() {
         // clunk fid as well
-        delete net9p.proto.fid2qid[fid];
+        that.del_qid(fid);
+        qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
 
-        var reply = net9p.proto.build_reply(id, tag, []);
+        var reply = that.build_reply(id, tag, []);
         net9p.send_reply(reply);
     });
     return null;
@@ -647,71 +652,17 @@ Protocol9P2000u.prototype.stat = function(id, tag, next_data) {
     var req = this.net9p.unmarshal(["w"], next_data);
     var fid = req[0];
 
-    var qid = this.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
-    display.log("[stat] path=" + path);
+        abort("[stat] No such QID found for fid=" + fid);
 
-    /*
-    if (qid.type & 0x80) {  // directory
-        // FIXME Return root directory's QID
-        var net9p = this.net9p;
-        net9p.fs.get_dir(path, function(entry) {
-            if (!entry.isDirectory)
-                abort("[stat] get_dir for file");
-            var name = path.replace(net9p.fs.root, "");
-            if (name == "")
-                name = "/";
-            var atime = (new Date()).getTime();
-            var mtime = entry.mtime.getTime();
-            var payload = net9p.proto.build_stat(name, 0, qid, atime, mtime);
-            payload = [0, 0].concat(payload);  // Ignored by guest but required
+    display.log("[stat] path=" + qid.entry.fullPath);
+    var filesize = qid.entry.isDirectory ? 0 : qid.entry.size;
+    var payload = this.build_stat(qid.name, filesize, qid, qid.atime, qid.entry.mtime.getTime());
+    payload = [0, 0].concat(payload);  // Ignored by guest but required
 
-            var reply = net9p.proto.build_reply(id, tag, payload);
-            net9p.send_reply(reply);
-        });
-    } else {  // file
-        var net9p = this.net9p;
-        net9p.fs.get_file(path, function(entry) {
-            if (entry.isDirectory)
-                abort("[stat] get_file for directory");
-
-            var name = path.replace(net9p.fs.root, "");
-            var atime = (new Date()).getTime();
-            var mtime = entry.mtime.getTime();
-            var filesize = entry.size;
-            var payload = net9p.proto.build_stat(name, filesize, qid, atime, mtime);
-            payload = [0, 0].concat(payload);  // Ignored by guest but required
-
-            var reply = net9p.proto.build_reply(id, tag, payload);
-            net9p.send_reply(reply);
-        });
-    }
-    */
-    var net9p = this.net9p;
-    net9p.fs.get(path, function(entry) {
-        var name = path.replace(net9p.fs.root, "");
-        var atime = (new Date()).getTime();
-        var mtime = entry.mtime.getTime();
-        var filesize = 0;
-
-        if (entry.isDirectory) {
-            if (name == "")
-                name = "/";
-        } else {
-            filesize = entry.size;
-        }
-
-        var payload = net9p.proto.build_stat(name, filesize, qid, atime, mtime);
-        payload = [0, 0].concat(payload);  // Ignored by guest but required
-
-        var reply = net9p.proto.build_reply(id, tag, payload);
-        net9p.send_reply(reply);
-    });
-    return null;
+    var reply = this.build_reply(id, tag, payload);
+    return reply;
 };
 Protocol9P2000u.prototype[124] = Protocol9P2000u.prototype.stat;
 
@@ -721,34 +672,29 @@ Protocol9P2000u.prototype.wstat = function(id, tag, next_data) {
     next_data(); next_data();  // We need it to remove unknown halfword data
     var stat_vals = this.build_stat_vals_from_data(next_data);
 
-    var qid = this.fid2qid[fid];
+    var qid = this.get_qid(fid);
     if (!qid)
-        abort("No such QID found for fid=" + fid);
-    var path = this.qidpath2fspath[qid.path];
-    if (!path)
-        abort("No such path found for QID=" + qid);
-    display.log("[wstat] path=" + path);
+        abort("[wstat] No such QID found for fid=" + fid);
 
-    var name = path.replace(this.net9p.fs.root, "");
-    if (qid.type & 0x80) {  // directory
-        if (name == "")
-            name = "/";
-    }
+    display.log("[wstat] path=" + qid.entry.fullPath);
 
-    if (stat_vals[9] != name) {
+    qid.atime = qid.parent.atime = (new Date()).getTime();
+    if (stat_vals[9] && stat_vals[9] != qid.name) {
         var newname = stat_vals[9];
         // FIXME only support rename
+        display.log("[wstat] newname=" + newname + ", name=" + name);
+
         var net9p = this.net9p;
-        // FIXME
-        net9p.fs.get_root(function(root) {
-            net9p.fs.rename(root, name, newname, function(entry) {
-                var reply = net9p.proto.build_reply(id, tag, []);
-                net9p.send_reply(reply);
-            });
+        var that = this;
+        display.log("[wstat] parent=" + qid.parent.entry.fullPath);
+        net9p.fs.rename(qid.parent.entry, qid.name, newname, function(entry) {
+            var reply = that.build_reply(id, tag, []);
+            net9p.send_reply(reply);
         });
+
         return null;
     } else {
-        return net9p.proto.build_reply(id, tag, []);
+        return this.build_reply(id, tag, []);
     }
 };
 Protocol9P2000u.prototype[126] = Protocol9P2000u.prototype.wstat;

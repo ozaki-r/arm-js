@@ -127,9 +127,10 @@ function readFromFile(name, size, handler, is_text) {
     window.requestFileSystem(window.PERSISTENT, size, onInitFs, errorHandler);
 }
 
-function createDirectory(path, handler) {
+function createDirectory(parent, path, handler) {
     function onInitFs(fs) {
-        fs.root.getDirectory(path, {create: true}, function(dirEntry) {
+        var dir = parent ? parent : fs.root;
+        dir.getDirectory(path, {create: true}, function(dirEntry) {
             if (handler)
                 handler(dirEntry);
         }, errorHandler);
@@ -138,9 +139,10 @@ function createDirectory(path, handler) {
     window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
 }
 
-function getDirectory(path, handler, errcb) {
+function getDirectory(parent, path, handler, errcb) {
     function onInitFs(fs) {
-        fs.root.getDirectory(path, {}, function(dirEntry) {
+        var dir = parent ? parent : fs.root;
+        dir.getDirectory(path, {}, function(dirEntry) {
             if (handler)
                 handler(dirEntry);
         }, errcb ? errcb : errorHandler);
@@ -149,9 +151,10 @@ function getDirectory(path, handler, errcb) {
     window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
 }
 
-function createFile(path, handler) {
+function createFile(parent, path, handler) {
     function onInitFs(fs) {
-        fs.root.getFile(path, {create: true}, function(fileEntry) {
+        var dir = parent ? parent : fs.root;
+        dir.getFile(path, {create: true}, function(fileEntry) {
             if (handler)
                 handler(fileEntry);
         }, errorHandler);
@@ -160,9 +163,10 @@ function createFile(path, handler) {
     window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
 }
 
-function getFile(path, handler, errcb) {
+function getFile(parent, path, handler, errcb) {
     function onInitFs(fs) {
-        fs.root.getFile(path, {}, function(fileEntry) {
+        var dir = parent ? parent : fs.root;
+        dir.getFile(path, {}, function(fileEntry) {
             if (handler)
                 handler(fileEntry);
         }, errcb ? errcb : errorHandler);
