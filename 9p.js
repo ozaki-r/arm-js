@@ -170,26 +170,39 @@ function Protocol9P2000u(net9p) {
 
     this.msize = 0;
     this.fid2qid = {};
-    this.fspath2qid = {};
+    this.path2qid = {};
 }
+
+Protocol9P2000u.prototype.hashCode32 = function(string) {
+    var hash = 0;
+    if (string.length === 0)
+        return hash;
+    for (var i=0; i < string.length; i++) {
+        hash = 31 * hash + string.charCodeAt(i);
+        hash = hash & hash;
+        if (hash < 0)
+            hash += 0x100000000;
+    }
+    return hash;
+};
 
 Protocol9P2000u.prototype.add_qid = function(fid, qid) {
     //display.log("Adding fid=" + fid + ", name=" + qid.name + ", fullPath=" + qid.entry.fullPath);
     this.fid2qid[fid] = qid;
-    this.fspath2qid[qid.fullPath] = qid;
+    this.path2qid[qid.fullPath] = qid;
 };
 
 Protocol9P2000u.prototype.del_qid = function(fid) {
     var qid = this.fid2qid[fid];
     delete this.fid2qid[fid];
-    delete this.fspath2qid[qid.fullPath];
+    delete this.path2qid[qid.fullPath];
 };
 
 Protocol9P2000u.prototype.get_qid = function(fid_or_path) {
     if (typeof fid_or_path == "number")
         return this.fid2qid[fid_or_path];
     else if (typeof fid_or_path == "string")
-        return this.fspath2qid[fid_or_path];
+        return this.path2qid[fid_or_path];
     else
         abort("get_qid: unknown key type: " + (typeof fid_or_path));
 };
@@ -214,9 +227,9 @@ Protocol9P2000u.prototype[100] = Protocol9P2000u.prototype.version;
 Protocol9P2000u.prototype.attach = function(id, tag, next_data) {
     var req = this.net9p.unmarshal(["w", "w", "s", "s", "w"], next_data);
     var fid = req[0];
-    var afid = req[1];  // afid is used for auth. virtio_9p doesn't use it.
-    var uname = req[2];
-    var aname = req[3];
+    var afid = req[1];  // For auth. Ignored.
+    var uname = req[2];  // Username. Ignored.
+    var aname = req[3];  // Mount point. Ignored.
     var n_uname = req[4];
     display.log("[attach] fid=" + fid + ", afid=" + afid + ", uname=" + uname
                 + ", aname=" + aname + ", n_uname=" + n_uname);
@@ -228,13 +241,13 @@ Protocol9P2000u.prototype.attach = function(id, tag, next_data) {
         var qid = {
             type: 0x10 | 0x80,  // mount point & directory
             version: entry.mtime.getTime(),
-            path: net9p.hashCode32(entry.fullPath),
+            path: that.hashCode32(entry.fullPath),
             name: "/",
-            entry: entry,  // include fullPath and mtime
-            atime: (new Date()).getTime(),  // updated by attach
-            parent: null
+            entry: entry,  // It includes fullPath and mtime
+            atime: getCurrentTime(),  // Need to update
+            parent: null  // See below
         };
-        qid.parent = qid;  // fake
+        qid.parent = qid;  // To avoid checking null
         display.log("[attach] fullPath=" + entry.fullPath);
 
         that.add_qid(fid, qid);
@@ -251,7 +264,7 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
     // path elements ["root", "dir1", "dir2",...]
     var req = this.net9p.unmarshal(["w", "w", "h"], next_data);
     var fid = req[0];
-    var nwfid = req[1];  // afid is used for auth. arm-js doesn't use it.
+    var nwfid = req[1];
     var nwname = req[2];
     display.log("[walk] fid=" + fid + ", nwfid=" + nwfid + ", nwname=" + nwname);
 
@@ -286,10 +299,10 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
                 var _qid = {
                     type: (entry.isDirectory ? 0x80 : 0),
                     version: entry.mtime.getTime(),
-                    path: net9p.hashCode32(entry.fullPath),
+                    path: that.hashCode32(entry.fullPath),
                     name: entry.name,
-                    entry: entry,  // include fullPath and mtime
-                    atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
+                    entry: entry,
+                    atime: (entry.isDirectory ? getCurrentTime() : entry.mtime.getTime()),
                     parent: pqid
                 };
 
@@ -297,8 +310,8 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
 
                 walk(_qid, names.slice(1));
             }, function(e) {
-                // FIXME: have to check error code
                 if (names == wnames) {
+                    // FIXME: have to check error code
                     var payload = net9p.marshal(["s", "w"], ["No such file or directory", 2]);
                     var reply = that.build_reply(that.TERROR, tag, payload);
                 } else {
@@ -354,7 +367,7 @@ Protocol9P2000u.prototype.open = function(id, tag, next_data) {
             // Update
             qid.entry = entry;
             qid.version = entry.mtime.getTime();
-            qid.atime = (new Date()).getTime();
+            qid.atime = getCurrentTime();
 
             var payload = net9p.marshal(["Q", "w"], [qid, this.IOUNIT]);
             var reply = that.build_reply(id, tag, payload);
@@ -393,7 +406,7 @@ Protocol9P2000u.prototype.create = function(id, tag, next_data) {
             var cqid = {
                 type: 0,
                 version: entry.mtime.getTime(),
-                path: net9p.hashCode32(entry.fullPath),
+                path: that.hashCode32(entry.fullPath),
                 name: entry.name,
                 entry: entry,  // include fullPath and mtime
                 atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
@@ -415,7 +428,7 @@ Protocol9P2000u.prototype.create = function(id, tag, next_data) {
             var cqid = {
                 type: 0x80,
                 version: entry.mtime.getTime(),
-                path: net9p.hashCode32(entry.fullPath),
+                path: that.hashCode32(entry.fullPath),
                 name: entry.name,
                 entry: entry,  // include fullPath and mtime
                 atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
@@ -452,7 +465,7 @@ Protocol9P2000u.prototype.read_directory = function(qid, offset, entries) {
             cqid = {
                 type: (ent.isDirectory ? 0x80 : 0),
                 version: mtime,
-                path: this.net9p.hashCode32(ent.fullPath)
+                path: this.hashCode32(ent.fullPath)
             };
         }
         var stat = this.build_stat(ent.name, ent.size, cqid, atime, mtime);
@@ -484,7 +497,7 @@ Protocol9P2000u.prototype.read = function(id, tag, next_data) {
     if (qid.type & 0x80) {  // directory
         display.log("[read] reading directory: " + qid.entry.fullPath);
         net9p.fs.get_dir_entries(qid.entry, function(entries) {
-            qid.atime = (new Date()).getTime();
+            qid.atime = getCurrentTime();
 
             var payload = that.read_directory(qid, offset, entries);
             var reply = that.build_reply(id, tag, payload);
@@ -492,7 +505,7 @@ Protocol9P2000u.prototype.read = function(id, tag, next_data) {
         });
     } else {  // file
         net9p.fs.read(qid.entry, offset, count, function(data) {
-            qid.atime = (new Date()).getTime();
+            qid.atime = getCurrentTime();
 
             var count = net9p.marshal(["w"], [data.length]);
             display.log("[read] count=" + data.length);
@@ -528,7 +541,7 @@ Protocol9P2000u.prototype.write = function(id, tag, next_data) {
     var that = this;
     net9p.fs.write(qid.entry, offset, buffer, function(entry) {
         qid.entry = entry;
-        qid.atime = (new Date()).getTime();
+        qid.atime = getCurrentTime();
 
         var payload = net9p.marshal(["w"], [data.byteLength]);
         display.log("[write] count=" + data.byteLength);
@@ -565,7 +578,7 @@ Protocol9P2000u.prototype.remove = function(id, tag, next_data) {
     net9p.fs.remove(qid.entry, function() {
         // clunk fid as well
         that.del_qid(fid);
-        qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
+        qid.parent.atime = getCurrentTime();  // FIXME: different from entry.mtime
 
         var reply = that.build_reply(id, tag, []);
         net9p.send_reply(reply);
@@ -678,10 +691,10 @@ Protocol9P2000u.prototype.wstat = function(id, tag, next_data) {
 
     display.log("[wstat] path=" + qid.entry.fullPath);
 
-    qid.atime = qid.parent.atime = (new Date()).getTime();
+    qid.atime = qid.parent.atime = getCurrentTime();
     if (stat_vals[9] && stat_vals[9] != qid.name) {
         var newname = stat_vals[9];
-        // FIXME only support rename
+        // FIXME: support only rename
         display.log("[wstat] newname=" + newname + ", name=" + name);
 
         var net9p = this.net9p;
@@ -819,16 +832,3 @@ Net9p.prototype.unmarshal_header = function(data) {
 Net9p.prototype.send_reply = function(reply) {
     this.virtio.send_reply(reply);
 };
-
-Net9p.prototype.hashCode32 = function(string) {
-    var hash = 0;
-    if (string.length == 0)
-        return hash;
-    for (var i = 0; i < string.length; i++) {
-        hash = 31 * hash + string.charCodeAt(i);
-        hash = hash & hash;
-        if (hash < 0)
-            hash += 0x100000000;
-    }
-    return hash;
-}

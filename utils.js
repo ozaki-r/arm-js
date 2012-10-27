@@ -106,3 +106,7 @@ function stringToLong(str) {
     ret += str.charCodeAt(0);
     return ret;
 };
+
+function getCurrentTime() {
+    return (new Date()).getTime();
+};
