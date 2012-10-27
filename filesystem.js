@@ -6,6 +6,25 @@
  */
 window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFileSystem;
 
+function HTML5FileSystem(root, requestByte) {
+    this.rootDirectory = root;
+    this.requestByte = requestByte;
+
+    this.enabled = false;
+    this.fs = null;
+
+    var that = this;
+    window.webkitStorageInfo.requestQuota(window.PERSISTENT, this.requestByte, function(grantedBytes) {
+        console.debug((grantedBytes / 1024 / 1024).toString() + 'MB granted');
+
+        window.requestFileSystem(window.PERSISTENT, that.requestByte, function(fs) {
+            that.fs = fs;
+            that.enabled = true;
+            fs.root.getDirectory(that.rootDirectory, {creat: true});
+        }, errorHandler);
+    }, errorHandler);
+}
+
 function errorHandler(e) {
   var msg = '';
 
@@ -48,152 +67,178 @@ function errorHandler(e) {
   console.log('Error: ' + msg);
 }
 
-window.webkitStorageInfo.requestQuota(PERSISTENT, 50*1024*1024, function(grantedBytes) {
-  //window.requestFileSystem(window.PERSISTENT, grantedBytes, onInitFs, errorHandler);
-  display.log((grantedBytes/1024/1024).toString() + 'MB granted');
-}, function(e) {
-  display.log('Error', e);
-});
+HTML5FileSystem.prototype.fileWrite = function(name, data, callback) {
+    var that = this;
+    this.fs.root.getFile(name, function(entry) {
+        that.write(entry, data, 0, callback);
+    });
+};
 
-/*
-function onInitFs(fs) {
-   fs.root.getFile('log.txt', {create: true, exclusive: true}, function(fileEntry) {
+HTML5FileSystem.prototype.fileRead = function(name, as, callback) {
+    this.fs.root.getFile(name, {}, function(entry) {
+        entry.file(function(file) {
+            var reader = new FileReader();
+            reader.onloadend = function() {
+                callback(this.result);
+            };
+            if (as.text)
+                reader.readAsText(file);
+            else
+                reader.readAsArrayBuffer(file);
+        });
+    });
+};
 
-   // fileEntry.isFile === true
-   // fileEntry.name == 'log.txt'
-   // fileEntry.fullPath == '/log.txt'
+HTML5FileSystem.prototype.getRoot = function(callback) {
+    this.fs.root.getDirectory(this.rootDirectory, {}, function(entry) {
+        entry.getMetadata(function(metadata) {
+            entry.size = metadata.size;
+            entry.mtime = metadata.modificationTime;
+            callback(entry);
+        });
+    });
+};
 
-   }, errorHandler);
-}
-
-window.requestFileSystem(window.PERSISTENT, 1024*1024, onInitFs, errorHandler);
-*/
-
-function writeToFile(name, data, size, is_text) {
-    function onInitFs(fs) {
-      // Truncate to 0
-      fs.root.getFile(name, {create: true}, function(fileEntry) {
-        fileEntry.createWriter(function(fileWriter) {
-          fileWriter.onwriteend = function(e) {
-            console.log('Truncate completed.');
-          };
-
-          fileWriter.onerror = function(e) {
-            console.log('Truncate failed: ' + e.toString());
-          };
-
-          fileWriter.truncate(0);
-        }, errorHandler);
-      }, errorHandler);
-
-      // Write content
-      fs.root.getFile(name, {create: true}, function(fileEntry) {
-        fileEntry.createWriter(function(fileWriter) {
-          fileWriter.onwriteend = function(e) {
-            console.log('Write completed.');
-          };
-
-          fileWriter.onerror = function(e) {
-            console.log('Write failed: ' + e.toString());
-          };
-
-          if (is_text)
-              fileWriter.write(new Blob([data], {type: "text/plain"}));
-          else
-              fileWriter.write(new Blob([data], {type: "example/binary"}));
-
-        }, errorHandler);
-      }, errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, size, onInitFs, errorHandler);
-}
-
-function readFromFile(name, size, handler, is_text) {
-    function onInitFs(fs) {
-        fs.root.getFile(name, {}, function(fileEntry) {
-            fileEntry.file(function(file) {
-                var reader = new FileReader();
-
-                reader.onloadend = handler;
-                if (is_text)
-                    reader.readAsText(file);
-                else
-                    reader.readAsArrayBuffer(file);
-            }, errorHandler);
-        }, errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, size, onInitFs, errorHandler);
-}
-
-function createDirectory(parent, path, handler) {
-    function onInitFs(fs) {
-        var dir = parent ? parent : fs.root;
-        dir.getDirectory(path, {create: true}, function(dirEntry) {
-            if (handler)
-                handler(dirEntry);
-        }, errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
-}
-
-function getDirectory(parent, path, handler, errcb) {
-    function onInitFs(fs) {
-        var dir = parent ? parent : fs.root;
-        dir.getDirectory(path, {}, function(dirEntry) {
-            if (handler)
-                handler(dirEntry);
-        }, errcb ? errcb : errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
-}
-
-function createFile(parent, path, handler) {
-    function onInitFs(fs) {
-        var dir = parent ? parent : fs.root;
-        dir.getFile(path, {create: true}, function(fileEntry) {
-            if (handler)
-                handler(fileEntry);
-        }, errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
-}
-
-function getFile(parent, path, handler, errcb) {
-    function onInitFs(fs) {
-        var dir = parent ? parent : fs.root;
-        dir.getFile(path, {}, function(fileEntry) {
-            if (handler)
-                handler(fileEntry);
-        }, errcb ? errcb : errorHandler);
-    }
-
-    window.requestFileSystem(window.PERSISTENT, 1024 * 1024, onInitFs, errorHandler);
-}
-
-function toArray(list) {
-    return Array.prototype.slice.call(list || [], 0);
-}
-
-function readDirectoryEntries(dirEntry, handler) {
-    var dirReader = dirEntry.createReader();
-    var entries = [];
-
-    // Call the reader.readEntries() until no more results are returned.
-    var readEntries = function() {
-        dirReader.readEntries (function(results) {
-            if (results.length === 0) {
-                handler(entries.sort());
-            } else {
-                entries = entries.concat(toArray(results));
-                readEntries();
-            }
-        }, errorHandler);
+HTML5FileSystem.prototype.getEntry = function(parent, name, callback, errcb) {
+    var _callback = function(entry) {
+        entry.getMetadata(function(metadata) {
+            entry.size = metadata.size;
+            entry.mtime = metadata.modificationTime;
+            callback(entry);
+        });
     };
+    parent.getFile(name, {}, _callback, function(e) {
+        if (e.code == FileError.TYPE_MISMATCH_ERR) {
+            parent.getDirectory(name, {}, _callback);
+        } else {
+            errorHandler(e);
+            if (errcb)
+                errcb(e);
+        }
+    });
+};
 
-    readEntries(); // Start reading dirs.
-}
+HTML5FileSystem.prototype.getDirectoryEntries = function(dirEntry, callback) {
+    var toArray = function(list) {
+        return Array.prototype.slice.call(list || [], 0);
+    }
+
+    var readDirectoryEntries = function(entry, handler) {
+        var dirReader = entry.createReader();
+        var entries = [];
+
+        var readEntries = function() {
+            dirReader.readEntries (function(results) {
+                if (results.length === 0) {
+                    handler(entries.sort());
+                } else {
+                    entries = entries.concat(toArray(results));
+                    readEntries();
+                }
+            }, errorHandler);
+        };
+
+        readEntries();
+    }
+
+    readDirectoryEntries(dirEntry, function(entries) {
+        var ret_entries = [];
+        function getMetadata(entry) {
+            if (!entry) {
+                callback(ret_entries);
+                return;
+            }
+            entry.getMetadata(function(metadata) {
+                entry.size = metadata.size;
+                entry.mtime = metadata.modificationTime;
+                ret_entries.push(entry);
+                if (entries.length)
+                    getMetadata(entries.shift());
+                else
+                    callback(ret_entries);
+            });
+        };
+        getMetadata(entries.shift());
+    });
+};
+
+HTML5FileSystem.prototype.create = function(parent, name, is, callback) {
+    var getEntry = is.file ? parent.getFile : parent.getDirectory;
+    getEntry.call(parent, name, {create: true}, function(entry) {
+        entry.getMetadata(function(metadata) {
+            entry.size = metadata.size;
+            entry.mtime = metadata.modificationTime;
+            callback(entry);
+        });
+    });
+};
+
+HTML5FileSystem.prototype.truncate = function(entry, callback) {
+    entry.createWriter(function(fileWriter) {
+        fileWriter.truncate(0);
+        callback(entry);
+    });
+};
+
+HTML5FileSystem.prototype.write = function(entry, buffer, offset, callback) {
+    entry.createWriter(function(fileWriter) {
+        fileWriter.onwriteend = function(e) {
+            callback(entry);
+        };
+
+        fileWriter.onerror = function(e) {
+            console.log('Write failed: ' + e.toString());
+        };
+
+        fileWriter.seek(offset);
+        var view = new Uint8Array(buffer);
+        fileWriter.write(new Blob([view]));
+    });
+};
+
+HTML5FileSystem.prototype.read = function(entry, offset, count, callback) {
+    entry.file(function(file) {
+        var fileReader = new FileReader();
+
+        fileReader.onloadend = function(e) {
+            var ret = [];
+            var buffer = this.result;
+
+            if (offset > buffer.byteLength) {
+                callback([]);
+                return;
+            }
+
+            var size = buffer.byteLength < count ? buffer.byteLength : count;
+            if ((size + offset) > buffer.byteLength)
+                size = buffer.byteLength - offset;
+            var data = new Uint8Array(buffer, offset, size);
+            for (var i=0; i < size; i++)
+                ret.push(data[i]);
+            callback(ret);
+        };
+        fileReader.readAsArrayBuffer(file);
+    });
+};
+
+HTML5FileSystem.prototype.remove = function(entry, callback) {
+    entry.remove(function() {
+        callback();
+    }, function(e) {
+        // FIXME: when directory is not empty
+        errorHandler(e);
+        callback();
+    });
+};
+
+HTML5FileSystem.prototype.rename = function(dir, oldname, newname, callback) {
+    this.getEntry(dir, oldname, function(entry) {
+        entry.moveTo(dir, newname, function() {
+            callback();
+        }, function(e) {
+            // FIXME
+            errorHandler(e);
+            callback();
+        });
+    });
+};

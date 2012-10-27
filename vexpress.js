@@ -1628,19 +1628,23 @@ System.prototype.restart = function() {
 System.prototype.save_memory = function() {
     display.log("saving whole memory to a file");
     // Have to pass ArrayBufferView, not ArrayBuffer (deprecated)
-    writeToFile("mem.dat", this.memory.mem_byte, this.memory.size, false);
+    this.fs.fileWrite("mem.dat", this.memory.mem);
 };
 
-System.prototype.restore_memory = function() {
+System.prototype.restore_memory = function(handler) {
     var system = this;
-    var handler = function(e) {
-        system.memory = new Memory(this.result.byteLength);
-        system.memory.init(this.result);
+    var _handler = function(data) {
+        //system.memory = new Memory(this.result.byteLength);
+        //system.memory.init(this.result);
+        system.memory = new Memory(data.byteLength);
+        system.memory.init(data);
         system.memctlr.memory = system.memory;
         display.log("memory restored");
+        handler();
     };
     display.log("restoring memory from a file");
-    readFromFile("mem.dat", this.memory.size, handler, false);
+    //this.fs.read("mem.dat", this.memory.size, _handler, false);
+    this.fs.fileRead("mem.dat", {text: false}, _handler);
 };
 
 System.prototype.save = function() {
@@ -1754,6 +1758,8 @@ function VersatileExpress(configs, options) {
     this.io.register_io("SMC", this.SMC);
     this.GPIO = new UnimplementedDevice(0x100e8000);
     this.io.register_io("GPIO", this.GPIO);
+
+    this.fs = new HTML5FileSystem('/', 50 * 1024 * 1024);
 }
 
 VersatileExpress.prototype = new System();
@@ -1823,14 +1829,14 @@ VersatileExpress.prototype.save = function() {
     params.virtio_mmio = this.virtio_mmio.save();
 
     var params_str = JSON.stringify(params);
-    writeToFile("system.json", params_str, params_str.length, true);
+    this.fs.fileWrite("system.json", params_str);
     this.save_memory();
 };
 
 VersatileExpress.prototype.restore = function() {
     var system = this;
-    var handler = function(e) {
-        var params = JSON.parse(this.result);
+    var handler = function(data) {
+        var params = JSON.parse(data);
         // Unmarshal
         system.cpu.restore(params.cpu);
         var cp15 = system.cpu.coprocs[15];
@@ -1844,13 +1850,14 @@ VersatileExpress.prototype.restore = function() {
         system.sysctrl.restore(params.sysctrl);
         system.virtio_mmio.restore(params.virtio_mmio);
 
-        system.restore_memory();
-        display.log("system restored");
-        system.is_booted = true;
-        system.is_running = false;
-        system.state_changed();
+        system.restore_memory(function() {
+            display.log("system restored");
+            system.is_booted = true;
+            system.is_running = false;
+            system.state_changed();
+        });
     };
-    readFromFile("system.json", 50*1024*1024, handler, true);
+    this.fs.fileRead("system.json", {text: true}, handler);
 };
 
 VersatileExpress.prototype.dump = function() {

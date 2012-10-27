@@ -5,157 +5,6 @@
  * Dual licensed under the MIT or GPL Version 2 licenses.
  */
 
-function FS9P() {
-    this.root = '/9proot';  // Root directory for virtio-9p
-}
-
-FS9P.prototype.initFileSystem = function() {
-    createDirectory(null, this.root);
-};
-
-FS9P.prototype.get_dir = function(path, callback) {
-};
-
-FS9P.prototype.get_root = function(callback) {
-    getDirectory(null, this.root, function(entry) {
-        entry.getMetadata(function(metadata) {
-            entry.size = metadata.size;
-            entry.mtime = metadata.modificationTime;
-            callback(entry);
-        });
-    });
-};
-
-FS9P.prototype.get_dir_entries = function(dirEntry, callback) {
-    readDirectoryEntries(dirEntry, function(entries) {
-        var ret_entries = [];
-        function get_metadata(entry) {
-            if (!entry) {
-                callback(ret_entries);
-                return;
-            }
-            entry.getMetadata(function(metadata) {
-                entry.size = metadata.size;
-                entry.mtime = metadata.modificationTime;
-                ret_entries.push(entry);
-                if (entries.length)
-                    get_metadata(entries.shift());
-                else
-                    callback(ret_entries);
-            });
-        };
-        get_metadata(entries.shift());
-    });
-};
-
-FS9P.prototype.create_file = function(parent, name, callback) {
-    createFile(parent, name, function(entry) {
-        entry.getMetadata(function(metadata) {
-            entry.size = metadata.size;
-            entry.mtime = metadata.modificationTime;
-            callback(entry);
-        });
-    });
-};
-
-FS9P.prototype.create_dir = function(parent, name, callback) {
-    createDirectory(parent, name, function(entry) {
-        entry.getMetadata(function(metadata) {
-            entry.size = metadata.size;
-            entry.mtime = metadata.modificationTime;
-            callback(entry);
-        });
-    });
-};
-
-FS9P.prototype.get = function(parent, name, callback, errcb) {
-    var _callback = function(entry) {
-        entry.getMetadata(function(metadata) {
-            entry.size = metadata.size;
-            entry.mtime = metadata.modificationTime;
-            callback(entry);
-        });
-    };
-    getFile(parent, name, _callback, function(e) {
-        if (e.code == FileError.TYPE_MISMATCH_ERR) {
-            getDirectory(parent, name, _callback);
-        } else {
-            errorHandler(e);
-            if (errcb)
-                errcb(e);
-        }
-    });
-};
-
-FS9P.prototype.truncate = function(entry, callback) {
-    entry.createWriter(function(fileWriter) {
-        fileWriter.truncate(0);
-        callback(entry);
-    });
-};
-
-FS9P.prototype.write = function(entry, offset, buffer, callback) {
-    entry.createWriter(function(fileWriter) {
-        fileWriter.onwriteend = function(e) {
-            callback(entry);
-        };
-
-        fileWriter.onerror = function(e) {
-            console.log('Write failed: ' + e.toString());
-        };
-
-        fileWriter.seek(offset);
-        var view = new Uint8Array(buffer);
-        fileWriter.write(new Blob([view]));
-    });
-};
-
-FS9P.prototype.read = function(entry, offset, count, callback) {
-    entry.file(function(file) {
-        var fileReader = new FileReader();
-        fileReader.onloadend = function(e) {
-            var ret = [];
-            var buffer = this.result;
-
-            if (offset > buffer.byteLength)
-                callback([]);
-
-            var size = buffer.byteLength < count ? buffer.byteLength : count;
-            if ((size + offset) > buffer.byteLength)
-                size = buffer.byteLength - offset;
-            var data = new Uint8Array(buffer, offset, size);
-            for (var i=0; i < size; i++)
-                ret.push(data[i]);
-            callback(ret);
-        };
-        fileReader.readAsArrayBuffer(file);
-    });
-};
-
-FS9P.prototype.remove = function(entry, callback) {
-    entry.remove(function() {
-        callback();
-    }, function(e) {
-        // FIXME when directory is not empty
-        errorHandler(e);
-        callback();
-    });
-};
-
-FS9P.prototype.rename = function(dir, oldname, newname, callback) {
-    //var path = [dir.fullPath, oldname].join("/");
-    this.get(dir, oldname, function(entry) {
-        entry.moveTo(dir, newname, function() {
-            callback();
-        }, function(e) {
-            // FIXME
-            errorHandler(e);
-            callback();
-        });
-    });
-};
-
-
 /*
  * 9P2000.u Protocol
  */
@@ -237,7 +86,7 @@ Protocol9P2000u.prototype.attach = function(id, tag, next_data) {
     // Return root directory's QID
     var net9p = this.net9p;
     var that = this;
-    net9p.fs.get_root(function(entry) {
+    net9p.fs.getRoot(function(entry) {
         var qid = {
             type: 0x10 | 0x80,  // mount point & directory
             version: entry.mtime.getTime(),
@@ -295,7 +144,7 @@ Protocol9P2000u.prototype.walk = function(id, tag, next_data) {
 
         if (name) {
             display.log("[walk] walking: " + name);
-            net9p.fs.get(pqid.entry, name, function(entry) {
+            net9p.fs.getEntry(pqid.entry, name, function(entry) {
                 var _qid = {
                     type: (entry.isDirectory ? 0x80 : 0),
                     version: entry.mtime.getTime(),
@@ -397,51 +246,26 @@ Protocol9P2000u.prototype.create = function(id, tag, next_data) {
 
     var net9p = this.net9p;
     var that = this;
-    if (perm & 0x80000000) {  // directory
-        net9p.fs.create_dir(qid.entry, name, function(entry) {
-            if (!entry.isDirectory)
-                abort("file created for directory creation");
-            display.log("[create][dir] fullPath=" + entry.fullPath);
+    var isfile = perm & 0x80000000 ? false : true;
+    net9p.fs.create(qid.entry, name, {file: isfile}, function(entry) {
+        display.log("[create] fullPath=" + entry.fullPath);
 
-            var cqid = {
-                type: 0,
-                version: entry.mtime.getTime(),
-                path: that.hashCode32(entry.fullPath),
-                name: entry.name,
-                entry: entry,  // include fullPath and mtime
-                atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
-                parent: qid
-            };
-            that.add_qid(fid, cqid);
-            qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
+        var cqid = {
+            type: isfile ? 0 : 0x80,
+            version: entry.mtime.getTime(),
+            path: that.hashCode32(entry.fullPath),
+            name: entry.name,
+            entry: entry,
+            atime: isfile ? entry.mtime.getTime() : getCurrentTime(),
+            parent: qid
+        };
+        that.add_qid(fid, cqid);
+        qid.parent.atime = getCurrentTime();  // FIXME: different from entry.mtime
 
-            var payload = net9p.marshal(["Q", "w"], [cqid, that.IOUNIT]);
-            var reply = that.build_reply(id, tag, payload);
-            net9p.send_reply(reply);
-        });
-    } else {  // file
-        net9p.fs.create_file(qid.entry, name, function(entry) {
-            if (entry.isDirectory)
-                abort("dir created for file creation");
-            display.log("[create][file] fullPath=" + entry.fullPath);
-
-            var cqid = {
-                type: 0x80,
-                version: entry.mtime.getTime(),
-                path: that.hashCode32(entry.fullPath),
-                name: entry.name,
-                entry: entry,  // include fullPath and mtime
-                atime: (entry.isDirectory ? (new Date()).getTime() : entry.mtime.getTime()),
-                parent: qid
-            };
-            that.add_qid(fid, cqid);
-            qid.parent.atime = (new Date()).getTime();  // FIXME different from entry.mtime
-
-            var payload = net9p.marshal(["Q", "w"], [cqid, that.IOUNIT]);
-            var reply = that.build_reply(id, tag, payload);
-            net9p.send_reply(reply);
-        });
-    }
+        var payload = net9p.marshal(["Q", "w"], [cqid, that.IOUNIT]);
+        var reply = that.build_reply(id, tag, payload);
+        net9p.send_reply(reply);
+    });
 
     return null;
 };
@@ -496,7 +320,7 @@ Protocol9P2000u.prototype.read = function(id, tag, next_data) {
     var that = this;
     if (qid.type & 0x80) {  // directory
         display.log("[read] reading directory: " + qid.entry.fullPath);
-        net9p.fs.get_dir_entries(qid.entry, function(entries) {
+        net9p.fs.getDirectoryEntries(qid.entry, function(entries) {
             qid.atime = getCurrentTime();
 
             var payload = that.read_directory(qid, offset, entries);
@@ -539,7 +363,7 @@ Protocol9P2000u.prototype.write = function(id, tag, next_data) {
 
     var net9p = this.net9p;
     var that = this;
-    net9p.fs.write(qid.entry, offset, buffer, function(entry) {
+    net9p.fs.write(qid.entry, buffer, offset, function(entry) {
         qid.entry = entry;
         qid.atime = getCurrentTime();
 
@@ -716,8 +540,7 @@ function Net9p(virtio) {
     this.virtio = virtio;
 
     this.proto = new Protocol9P2000u(this);
-    this.fs = new FS9P();
-    this.fs.initFileSystem();
+    this.fs = new HTML5FileSystem('/9proot', 50 * 1024 * 1024);
 }
 
 Net9p.prototype.marshal = function(type, data) {
