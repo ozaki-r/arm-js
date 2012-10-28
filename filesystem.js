@@ -20,7 +20,7 @@ function HTML5FileSystem(root, requestByte) {
         window.requestFileSystem(window.PERSISTENT, that.requestByte, function(fs) {
             that.fs = fs;
             that.enabled = true;
-            fs.root.getDirectory(that.rootDirectory, {creat: true});
+            fs.root.getDirectory(that.rootDirectory, {create: true}, null, errorHandler);
         }, errorHandler);
     }, errorHandler);
 }
