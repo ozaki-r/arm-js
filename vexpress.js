@@ -1628,7 +1628,7 @@ System.prototype.restart = function() {
 System.prototype.save_memory = function() {
     display.log("saving whole memory to a file");
     // Have to pass ArrayBufferView, not ArrayBuffer (deprecated)
-    this.fs.fileWrite("mem.dat", this.memory.mem);
+    this.fs.fileWrite("mem.dat", this.memory.mem_byte, {text: false});
 };
 
 System.prototype.restore_memory = function(handler) {
@@ -1759,7 +1759,7 @@ function VersatileExpress(configs, options) {
     this.GPIO = new UnimplementedDevice(0x100e8000);
     this.io.register_io("GPIO", this.GPIO);
 
-    this.fs = new HTML5FileSystem('/', 50 * 1024 * 1024);
+    this.fs = new HTML5FileSystem('/emulator', 50 * 1024 * 1024);
 }
 
 VersatileExpress.prototype = new System();
@@ -1829,7 +1829,7 @@ VersatileExpress.prototype.save = function() {
     params.virtio_mmio = this.virtio_mmio.save();
 
     var params_str = JSON.stringify(params);
-    this.fs.fileWrite("system.json", params_str);
+    this.fs.fileWrite("system.json", params_str, {text: true});
     this.save_memory();
 };
 

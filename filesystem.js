@@ -67,25 +67,53 @@ function errorHandler(e) {
   console.log('Error: ' + msg);
 }
 
-HTML5FileSystem.prototype.fileWrite = function(name, data, callback) {
+HTML5FileSystem.prototype.fileWrite = function(name, data, as, callback) {
     var that = this;
-    this.fs.root.getFile(name, function(entry) {
-        that.write(entry, data, 0, callback);
+    this.getRoot(function(dir) {
+        dir.getFile(name, {create: true}, function(entry) {
+            entry.createWriter(function(fileWriter) {
+                fileWriter.onwriteend = function(e) {
+                    fileWriter.onwriteend = function(e) {
+                        console.log("Write done");
+                        if (callback)
+                            callback(_entry);
+                    };
+                    fileWriter.onerror = function(e) {
+                        console.log('Write failed: ' + e.toString());
+                    };
+                    if (as.text)
+                        fileWriter.write(new Blob([data], {type: "text/plain"}));
+                    else
+                        fileWriter.write(new Blob([data], {type: "example/binary"}));
+                };
+                fileWriter.onerror = function(e) {
+                    console.log('Truncate failed: ' + e.toString());
+                };
+                fileWriter.truncate(0);
+            });
+        });
     });
 };
 
 HTML5FileSystem.prototype.fileRead = function(name, as, callback) {
-    this.fs.root.getFile(name, {}, function(entry) {
-        entry.file(function(file) {
-            var reader = new FileReader();
-            reader.onloadend = function() {
-                callback(this.result);
-            };
-            if (as.text)
-                reader.readAsText(file);
-            else
-                reader.readAsArrayBuffer(file);
-        });
+    this.getRoot(function(dir) {
+        dir.getFile(name, {create: true}, function(entry) {
+            entry.file(function(file) {
+                var reader = new FileReader();
+                reader.onloadend = function() {
+                    if (callback)
+                        callback(this.result);
+                };
+                reader.onerror = function(e) {
+                    console.log('Read failed: ' + e.toString());
+                };
+
+                if (as.text)
+                    reader.readAsText(file);
+                else
+                    reader.readAsArrayBuffer(file);
+            });
+        }, errorHandler);
     });
 };
 
