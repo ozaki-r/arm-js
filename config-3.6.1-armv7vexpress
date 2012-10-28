@@ -358,11 +358,10 @@ CONFIG_AUTO_ZRELADDR=y
 #
 # At least one emulation must be selected
 #
-# CONFIG_FPE_NWFPE is not set
-# CONFIG_FPE_FASTFPE is not set
-CONFIG_VFP=y
-CONFIG_VFPv3=y
-# CONFIG_NEON is not set
+CONFIG_FPE_NWFPE=y
+# CONFIG_FPE_NWFPE_XP is not set
+CONFIG_FPE_FASTFPE=y
+# CONFIG_VFP is not set
 
 #
 # Userspace binary formats
