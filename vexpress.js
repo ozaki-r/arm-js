@@ -1461,7 +1461,17 @@ System.prototype.loop = function() {
                 /*
                  * Decode an instruction
                  */
-                var inst_name = cpu.decode(inst, pc);
+                var inst_name = null;
+                try {
+                    inst_name = cpu.decode(inst, pc);
+                } catch (e) {
+                    if (e.toString() == "UND") {
+                        cpu.undefined_instruction();
+                        continue;
+                    } else {
+                        throw e;
+                    }
+                }
 
                 if (enable_instruction_counting)
                     this.count_inst(inst_name);

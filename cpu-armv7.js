@@ -4260,15 +4260,10 @@ CPU_ARMv7.prototype.decode_uncond = function(inst, addr) {
                     case 6:
                         if (op1 & 1) {
                             // LDC, LDC2 (immediate) & LDC, LDC2 (literal)
-                            // TODO: Need more check
-                            this.abort_not_impl("LDC, LDC2 (immediate)", inst, addr);
-                            this.abort_not_impl("LDC, LDC2 (literal)", inst, addr);
-                            break;
+                            throw "UND";
                         } else {
                             // STC, STC2
-                            // TODO: Need more check
-                            this.abort_not_impl("STC, STC2", inst, addr);
-                            break;
+                            throw "UND";
                         }
                     case 7:
                         if (!(op1 & 1<<4)) {
@@ -4284,8 +4279,7 @@ CPU_ARMv7.prototype.decode_uncond = function(inst, addr) {
                                 }
                             } else {
                                 // CDP, CDP2
-                                this.abort_not_impl("CDP, CDP2 1", inst, addr);
-                                return "cdp";
+                                throw "UND";
                             }
                             break;
                         }
@@ -5888,7 +5882,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                                 this.abort_simdvfp_inst(inst, addr);
                             } else {
                                 // CDP, CDP2
-                                return "cdp_a1";
+                                throw "UND";
                             }
                         }
                     }
@@ -5929,14 +5923,14 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                                 rn = bitops.get_bits(inst, 19, 16);
                                 if (rn == 0xf) {
                                     // LDC, LDC2 (literal)
-                                    this.abort_not_impl("LDC, LDC2 (literal)", inst, addr);
+                                    throw "UND";
                                 } else {
                                     // LDC, LDC2 (immediate)
-                                    this.abort_not_impl("LDC, LDC2 (immediate)", inst, addr);
+                                    throw "UND";
                                 }
                             } else {
                                 // STC, STC2
-                                this.abort_not_impl("STC, STC2", inst, addr);
+                                throw "UND";
                             }
                         }
                     }
@@ -5997,6 +5991,18 @@ CPU_ARMv7.prototype.supervisor = function() {
 
     var cp15 = this.coprocs[15];
     this.regs[15] = cp15.interrupt_vector_address + 0x08;
+};
+
+CPU_ARMv7.prototype.undefined_instruction = function() {
+    logger.log("undef instr");
+    this.spsr_und = this.clone_psr(this.cpsr);
+    this.regs_und[14] = this.get_pc() - 4;
+
+    this.change_mode(this.UND_MODE);
+    this.cpsr.i = 1;
+
+    var cp15 = this.coprocs[15];
+    this.regs[15] = cp15.interrupt_vector_address + 0x04;
 };
 
 
