@@ -2487,6 +2487,27 @@ CPU_ARMv7.prototype.ldrex = function(inst, addr) {
     this.print_inst_reg(addr, inst, "ldrex", null, t, n, null, null, null, true, false);
 };
 
+CPU_ARMv7.prototype.ldrt_a1 = function(inst, addr) {
+    this.print_inst("LDRT A1", inst, addr);
+    var u = (inst >>> 23) & 1;
+    var n = (inst >>> 16) & 0xf;
+    var t = (inst >>> 12) & 0xf;
+    var imm32 = inst & 0xfff;
+    var is_add = u == 1;
+
+    var valn = this.reg(n);
+    var offset = imm32;
+    var offset_addr = valn + (is_add ? offset : -offset);
+    var address = valn;
+    address = bitops.get_bits64(address, 31, 0); // XXX
+    var data = this.ld_word(address);
+    if (t == 15)
+        this.branch_to = data;
+    else
+        this.regs[t] = data;
+    //this.print_inst_reg(addr, inst, "ldrt", null, t, n, m, this.shift_t, this.shift_n, true, is_wback);
+};
+
 CPU_ARMv7.prototype.lsl_reg = function(inst, addr) {
     this.print_inst("LSL (register)", inst, addr);
     var s = inst & 0x00100000;
@@ -5674,7 +5695,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                             } else { // xx0x1
                                 if (op1 == 3 || op1 == 11) { // 0x011
                                     // LDRT
-                                    this.abort_not_impl("LDRT", inst, addr);
+                                    this.abort_not_impl("LDRT A2", inst, addr);
                                 } else {
                                     // LDR (register)
                                     return "ldr_reg";
@@ -5724,7 +5745,7 @@ CPU_ARMv7.prototype.decode = function(inst, addr) {
                         } else { // xx0x1
                             if (op1 == 3 || op1 == 0xb) { // 0x011
                                 // LDRT
-                                this.abort_not_impl("LDRT", inst, addr);
+                                return "ldrt_a1";
                             } else {
                                 rn = (inst >>> 16) & 0xf;
                                 if (rn == 0xf) {
