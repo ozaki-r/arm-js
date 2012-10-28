@@ -18,7 +18,7 @@
 	#size-cells = <1>;
 
 	chosen {
-		bootargs = "rw root=/dev/ram0 console=ttyAMA0 earlyprintk initrd=0x00800000,172285";
+		bootargs = "rw root=/dev/ram0 console=ttyAMA0 earlyprintk initrd=0x00800000,135433";
 	};
 
 	aliases {
