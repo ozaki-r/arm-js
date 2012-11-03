@@ -1331,7 +1331,7 @@ function System(configs, options) {
     this.gic = null;
     this.uart0 = null;
 
-    this.N_CONTIGUOUS_EXECUTION = 10000;
+    this.N_CONTIGUOUS_EXECUTION = 100000;
     // Chrome supports setTimeout with 1ms
     this.PAUSE_PERIOD = 1;  // in ms
     this.HALT_PERIOD = 10;  // in ms
