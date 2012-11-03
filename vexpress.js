@@ -1834,6 +1834,7 @@ VersatileExpress.prototype.save = function() {
     params.n_instructions = this.n_instructions;
     params.gic = this.gic.save();
     params.timer0 = this.timer0.save();
+    params.timer1 = this.timer1.save();
     params.uart0 = this.uart0.save();
     params.sysctrl = this.sysctrl.save();
     params.virtio_mmio = this.virtio_mmio.save();
@@ -1856,6 +1857,7 @@ VersatileExpress.prototype.restore = function() {
         system.n_instructions = params.n_instructions;
         system.gic.restore(params.gic);
         system.timer0.restore(params.timer0);
+        system.timer1.restore(params.timer1);
         system.uart0.restore(params.uart0);
         system.sysctrl.restore(params.sysctrl);
         system.virtio_mmio.restore(params.virtio_mmio);
@@ -1886,6 +1888,8 @@ VersatileExpress.prototype.dump = function() {
     this.sysregs.dump();
     display.log("\nTimer0:");
     this.timer0.dump();
+    display.log("\nTimer1:");
+    this.timer1.dump();
     display.log("\nUART0:");
     this.uart0.dump();
     display.log("\n");
