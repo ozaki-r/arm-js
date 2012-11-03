@@ -536,7 +536,7 @@ function SP804(baseaddr, irq, gic) {
     this.read = new Array();
     this.write = new Array();
 
-    this.DIV = 10;
+    this.TIMCLK = 100000;  // 1 MHz clock pluse input
 
     this.read[this.baseaddr + 0xfe0] = 0;
     this.read[this.baseaddr + 0xfe4] = 0;
@@ -627,7 +627,7 @@ SP804.prototype._write_TimerXControl1 = function(ctl) {
         clearTimeout(this.timeout_timer1.bind(this));
         var val = this[this.TimerXValue1];
         if (val != 0xffffffff)
-            setTimeout(this.timeout_timer1.bind(this), val/this.DIV); // FIXME
+            setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     } else {
         clearTimeout(this.timeout_timer1.bind(this));
     }
@@ -644,7 +644,7 @@ SP804.prototype._write_TimerXControl2 = function(ctl) {
         clearTimeout(this.timeout_timer2.bind(this));
         var val = this[this.TimerXValue2];
         if (val != 0xffffffff)
-            setTimeout(this.timeout_timer2.bind(this), val/this.DIV); // FIXME
+            setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     } else {
         clearTimeout(this.timeout_timer2.bind(this));
     }
@@ -681,10 +681,13 @@ SP804.prototype.timeout_timer1 = function() {
     if (!this[this.TimerXControl1].OneShot) {
         var val = this[this.TimerXValue1];
         if (val != 0xffffffff)
-            setTimeout(this.timeout_timer1.bind(this), val/this.DIV);
+            setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     }
-    // XXX
+    // XXX: Linux uses timer1 as timer interrupt generator and timer2 as counter.
+    // So we can update timer2 value on only timer1 interrupt.
     this[this.TimerXValue2] -= this[this.TimerXValue1];
+    if (this[this.TimerXValue2] < 0)
+        this[this.TimerXValue2] = 0xffffffff + this[this.TimerXValue2];
 };
 
 SP804.prototype.timeout_timer2 = function() {
@@ -694,7 +697,7 @@ SP804.prototype.timeout_timer2 = function() {
     if (!this[this.TimerXControl2].OneShot) {
         var val = this[this.TimerXValue1];
         if (val != 0xffffffff)
-            setTimeout(this.timeout_timer2.bind(this), val/this.DIV);
+            setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     }
 };
 
