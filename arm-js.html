@@ -71,11 +71,9 @@
 
 <body>
 <script>
-options = new Options();
-parameters = new Parameters();
-configurations = new Configurations();
-
 bitops = new BitOps();
+
+options = new Options();
 
 display = new Display("display", options);
 logger = new Logger(display, options);
@@ -83,16 +81,19 @@ tracer = new Tracer(display, options);
 btracer = new BranchTracer(display, options);
 
 $(document).ready(function() {
+    var parameters = new Parameters();
+    var configurations = new Configurations();
+
     configurations.read_saved_values(display);
     configurations.register_handlers();
 
-    system = new VersatileExpress(configurations, options);
+    var system = new VersatileExpress(configurations, options);
     function term_handler(str) {
         //system.keyboard.receive_char(str.charCodeAt(0));
         system.uart0.input_char(str.charCodeAt(0));
     }
 
-    term = new Term(80, 20, term_handler);
+    var term = new Term(80, 20, term_handler);
     system.uart0.write_to_terminal = term.write.bind(term);
 
     function system_state_changed_cb(system) {
