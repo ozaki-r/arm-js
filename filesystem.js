@@ -27,6 +27,10 @@ function HTML5FileSystem(root, requestByte) {
 
 function errorHandler(e) {
   var msg = '';
+  if (window.FileError === undefined) {
+    console.log('Error: Unknown');
+    return;
+  }
 
   switch (e.code) {
     case FileError.ENCODING_ERR:
