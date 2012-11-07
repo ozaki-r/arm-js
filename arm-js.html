@@ -96,22 +96,28 @@ $(document).ready(function() {
     var term = new Term(80, 20, term_handler);
     system.uart0.write_to_terminal = term.write.bind(term);
 
-    function system_state_changed_cb(system) {
+    var fsAvailable = false;
+    function system_state_changed_cb() {
         if (system.is_booted) {
             $("#stack").removeAttr("disabled");
             $("#show_page_tables").removeAttr("disabled");
             $("#dump_phymem").removeAttr("disabled");
             $("#dump_virmem").removeAttr("disabled");
-            if (system.is_running) {
-                $("#save").attr("disabled", "disabled")
-                $("#restore").attr("disabled", "disabled")
-                $("#step").attr("disabled", "disabled")
-            } else {
+            if (system.is_running)
+                $("#step").attr("disabled", "disabled");
+            else
+                $("#step").removeAttr("disabled");
+
+            if (fsAvailable && !system.is_running) {
                 $("#save").removeAttr("disabled");
                 $("#restore").removeAttr("disabled");
-                $("#step").removeAttr("disabled");
+            } else {
+                $("#save").attr("disabled", "disabled");
+                $("#restore").attr("disabled", "disabled");
             }
         } else {
+            if (fsAvailable)
+                $("#restore").removeAttr("disabled");
             $("#save").attr("disabled", "disabled");
             $("#step").attr("disabled", "disabled");
             $("#stack").attr("disabled", "disabled");
@@ -256,6 +262,14 @@ $(document).ready(function() {
         }
     }
 
+    // Test if HTML5 FileSystem is available
+    fsTestAvailability(50 * 1024 * 1024, function() {
+        system.enable_virtio_9p();
+        fsAvailable = true;
+        system_state_changed_cb();
+    }, function() {
+        system_state_changed_cb();
+    });
     setInterval(update_instruction_display, 1000);
 });
 </script>
@@ -269,7 +283,7 @@ $(function() {
   <button id="step" type="button" disabled>Execute one instruction</button>
   /
   <button id="save" type="button" disabled>Save system</button>
-  <button id="restore" type="button">Restore system</button>
+  <button id="restore" type="button" disabled>Restore system</button>
 </div>
 <div><span id="kips">0.0</span> KIPS / <span id="inst_counter">0</span> instructions executed / <span id="elapsed_time">0</span> sec elapsed</div>
 <div id="ui-tabs">
