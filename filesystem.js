@@ -6,6 +6,20 @@
  */
 window.requestFileSystem  = window.requestFileSystem || window.webkitRequestFileSystem;
 
+function fsTestAvailability(requestByte, sCallback, eCallback) {
+    if (!window.webkitStorageInfo) {
+        if (eCallback)
+            eCallback();
+        return;
+    }
+    window.webkitStorageInfo.requestQuota(window.PERSISTENT, requestByte, function(grantedBytes) {
+        window.requestFileSystem(window.PERSISTENT, requestByte, function(fs) {
+            if (sCallback)
+                sCallback(fs);
+        }, eCallback);
+    }, eCallback);
+}
+
 function HTML5FileSystem(root, requestByte) {
     this.rootDirectory = root;
     this.requestByte = requestByte;
@@ -14,14 +28,10 @@ function HTML5FileSystem(root, requestByte) {
     this.fs = null;
 
     var that = this;
-    window.webkitStorageInfo.requestQuota(window.PERSISTENT, this.requestByte, function(grantedBytes) {
-        console.debug((grantedBytes / 1024 / 1024).toString() + 'MB granted');
-
-        window.requestFileSystem(window.PERSISTENT, that.requestByte, function(fs) {
-            that.fs = fs;
-            that.enabled = true;
-            fs.root.getDirectory(that.rootDirectory, {create: true}, null, errorHandler);
-        }, errorHandler);
+    fsTestAvailability(requestByte, function(fs) {
+        that.fs = fs;
+        that.enabled = true;
+        fs.root.getDirectory(that.rootDirectory, {create: true}, null, errorHandler);
     }, errorHandler);
 }
 
