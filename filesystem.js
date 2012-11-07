@@ -33,6 +33,9 @@ function errorHandler(e) {
   }
 
   switch (e.code) {
+    case FileError.ABORT_ERR:
+      msg = 'ABORT_ERR';
+      break;
     case FileError.ENCODING_ERR:
       msg = 'ENCODING_ERR';
       break;
@@ -56,6 +59,9 @@ function errorHandler(e) {
       break;
     case FileError.INVALID_STATE_ERR:
       msg = 'INVALID_STATE_ERR';
+      break;
+    case FileError.SYNTAX_ERR:
+      msg = 'SYNTAX_ERR';
       break;
     case FileError.TYPE_MISMATCH_ERR:
       msg = 'TYPE_MISMATCH_ERR';
