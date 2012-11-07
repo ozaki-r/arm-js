@@ -1749,12 +1749,9 @@ function VersatileExpress(configs, options) {
     this.sysctrl = new SystemController(0x10001000);
     this.io.register_io("SystemController", this.sysctrl);
 
-    // Virtio 9P
-    this.virtio_mmio = new VirtioMMIO(0x10015000, this.irq_base + 15, this.gic);
-    this.virtio_mmio.register_tagname("armjs");
-    this.io.register_io("VirtioMMIO", this.virtio_mmio);
-    this.virtio_vring = new VirtioVring(this.memctlr, this.virtio_mmio);
-    this.virtio_9p = new Virtio9P(this.memctlr, this.virtio_vring);
+    // Dummy for Virtio 9P. It will be override if HTML5 FileSystem is available.
+    this.virtio_mmio = new UnimplementedDevice(0x10015000);
+    this.io.register_io("VirtioMMIO (disabled)", this.virtio_mmio);
 
     // Unimplemented Devices
     this.aaci = new UnimplementedDevice(0x10004000);
@@ -1776,6 +1773,14 @@ function VersatileExpress(configs, options) {
 }
 
 VersatileExpress.prototype = new System();
+
+VersatileExpress.prototype.enable_virtio_9p = function() {
+    this.virtio_mmio = new VirtioMMIO(0x10015000, this.irq_base + 15, this.gic);
+    this.virtio_mmio.register_tagname("armjs");
+    this.io.register_io("VirtioMMIO", this.virtio_mmio);
+    this.virtio_vring = new VirtioVring(this.memctlr, this.virtio_mmio);
+    this.virtio_9p = new Virtio9P(this.memctlr, this.virtio_vring);
+};
 
 VersatileExpress.prototype.boot = function(params) {
     this.memory.init();
