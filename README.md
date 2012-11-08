@@ -11,7 +11,7 @@ Emulator Features
 * Suspend/resume (Chrome only)
   * You can restore emulator states at any time
 * Persistent storage (Chrome only)
-  * Guest can access part of browser filesystem via virtio-9p
+  * Guest can access part of browser [filesystem](http://www.w3.org/TR/file-system-api/) via virtio-9p
 * Many debugging functions
 
 Tested Browsers
