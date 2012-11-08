@@ -1,21 +1,37 @@
-arm-js
-------
+Arm-js
+======
 
-It emulates ARMv7 and some peripherals of Versatile Express.
-It can run Linux 3.6.1 and some user processes.
+Arm-js is an ARM emulator written in Javascript. It emulates ARMv7-A
+and some peripherals of Versatile Express. It can boot Linux 3.6.1
+and run busybox processes.
 
-Get started
------------
+Emulator Features
+=================
+
+* Suspend/resume (Chrome only)
+  * You can restore emulator states at any time
+* Persistent storage (Chrome only)
+  * Guest can access part of browser filesystem via virtio-9p
+* Many debugging functions
+
+Tested Browsers
+===============
+
+* Chrome 23 (recommended)
+* Firefox 16
+* Safari 6
+
+Get Started
+===========
 
 1. Prepare term.js
-  1. Install js-beautify https://github.com/einars/js-beautify
+  1. Install [js-beautify](https://github.com/einars/js-beautify)
   2. Run prepare_termjs.sh
-2. Launch Chrome Web browser with special arguments (optional)
-  1. If you run arm-js files on local filesystem, you need to run
-     Chrome with --allow-file-access-from-files
-  2. If you are using old Chrome, you may need --unlimited-quota-for-files
-     to allow arm-js to store an emulator snaphost to local storage
-  3. For example, for Mac OS X, execute
-     'open -a "Google Chrome" --args --allow-file-access-from-files'
-     on a terminal
-3. Enjoy arm-js!
+2. Deploy files either on local filesystem or on HTTP server
+3. Access arm-js.html
+4. Push Boot button at the top-left corner to start the emulator
+
+Note that for Chrome you need to add --allow-file-access-from-files
+option to run arm-js from local filesystem. For example, for Mac OS X,
+execute 'open -a "Google Chrome" --args --allow-file-access-from-files'
+on a terminal.
