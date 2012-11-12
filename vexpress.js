@@ -87,168 +87,6 @@ function UnimplementedDevice(baseaddr) {
     this.read[this.baseaddr + 0xffc] = 0;
 };
 
-/*
- * ARM PrimeCell Multimedia Card Interface (PL180)
- */
-function PL180(baseaddr) {
-    this.baseaddr = baseaddr;
-
-    this.read = new Array();
-    this.write = new Array();
-
-    var pl180 = this;
-
-    this.MCIPeriphID0 = this.baseaddr + 0xfe0;
-    this[this.MCIPeriphID0] = 0;
-    //this[this.MCIPeriphID0] = bitops.set_bits(this[this.MCIPeriphID0], 7, 0, 0x80);
-    this.read[this.MCIPeriphID0] = function() {
-        return pl180[pl180.MCIPeriphID0];
-    };
-
-    this.MCIPeriphID1 = this.baseaddr + 0xfe4;
-    this[this.MCIPeriphID1] = 0;
-    //this[this.MCIPeriphID1] = bitops.set_bits(this[this.MCIPeriphID1], 7, 4, 1);
-    //this[this.MCIPeriphID1] = bitops.set_bits(this[this.MCIPeriphID1], 3, 0, 1);
-    this.read[this.MCIPeriphID1] = function() {
-        return pl180[pl180.MCIPeriphID1];
-    };
-
-    this.MCIPeriphID2 = this.baseaddr + 0xfe8;
-    this[this.MCIPeriphID2] = 0;
-    //this[this.MCIPeriphID2] = bitops.set_bits(this[this.MCIPeriphID2], 7, 4, 0);
-    //this[this.MCIPeriphID2] = bitops.set_bits(this[this.MCIPeriphID2], 3, 0, 4);
-    this.read[this.MCIPeriphID2] = function() {
-        return pl180[pl180.MCIPeriphID2];
-    };
-
-    this.MCIPeriphID3 = this.baseaddr + 0xfec;
-    this[this.MCIPeriphID3] = 0;
-    //this[this.MCIPeriphID3] = bitops.set_bits(this[this.MCIPeriphID3], 7, 0, 0);
-    this.read[this.MCIPeriphID3] = function() {
-        return pl180[pl180.MCIPeriphID3];
-    };
-
-    this.MCIPCellID0 = this.baseaddr + 0xff0;
-    this[this.MCIPCellID0] = 0;
-    //this[this.MCIPCellID0] = bitops.set_bits(this[this.MCIPCellID0], 7, 0, 0x0d);
-    this.read[this.MCIPCellID0] = function() {
-        return pl180[pl180.MCIPCellID0];
-    };
-
-    this.MCIPCellID1 = this.baseaddr + 0xff4;
-    this[this.MCIPCellID1] = 0;
-    //this[this.MCIPCellID1] = bitops.set_bits(this[this.MCIPCellID1], 7, 0, 0xf0);
-    this.read[this.MCIPCellID1] = function() {
-        return pl180[pl180.MCIPCellID1];
-    };
-
-    this.MCIPCellID2 = this.baseaddr + 0xff8;
-    this[this.MCIPCellID2] = 0;
-    //this[this.MCIPCellID2] = bitops.set_bits(this[this.MCIPCellID2], 7, 0, 0x05);
-    this.read[this.MCIPCellID2] = function() {
-        return pl180[pl180.MCIPCellID2];
-    };
-
-    this.MCIPCellID3 = this.baseaddr + 0xffc;
-    this[this.MCIPCellID3] = 0;
-    //this[this.MCIPCellID3] = bitops.set_bits(this[this.MCIPCellID3], 7, 0, 0xb1);
-    this.read[this.MCIPCellID3] = function() {
-        return pl180[pl180.MCIPCellID3];
-    };
-}
-
-/*
- * Synchronous Serial Port (PL022)
- */
-function SSP(baseaddr, irq, gic) {
-}
-
-/*
- * PS2 Keyboard/Mouse Interface (PL050)
- */
-function KMI(baseaddr, irq, gic) {
-    this.baseaddr = baseaddr;
-    this.irq = irq;
-    this.gic = gic;
-
-    kmi = this;
-    this.read = new Array();
-    this.write = new Array();
-    this.char_buffer = new Array();
-
-    this.CR = this.baseaddr + 0xfe0;
-    this.STAT = this.baseaddr + 0xfe4;
-    this.DATA = this.baseaddr + 0xfe8;
-    this.CLKDIV = this.baseaddr + 0xfec;
-    this.IR = this.baseaddr + 0xff0;
-
-    // KMICR Control register.
-    this.read[this.CR] = function() {
-        return 0;
-    };
-    this.write[this.CR] = function(sixbits) {
-        throw "KMI: write CR: " + sixbits.toString(2);
-    };
-
-    // KMISTAT Status register.
-    //this.read[this.STAT] = 0x43;
-    this.read[this.STAT] = function() {
-        if (kmi.char_buffer.length > 0)
-            return 1 << 4 | 0x43;
-        else
-            return 0x43;
-    };
-    // KMIDATA Received data (read)/ Data to be transmitted (write).
-    this.read[this.DATA] = function() {
-        if (kmi.char_buffer.length > 0)
-            return kmi.char_buffer.shift();
-        else
-            return 0;
-    };
-    this.write[this.DATA] = function(word) {
-        throw "KMI: write DATA: " + word;
-    };
-
-    // KMICLKDIV Clock divisor register.
-    this.read[this.CLKDIV] = function() {
-        return 0;
-    };
-    this.write[this.CLKDIV] = function(fourbits) {
-        throw "KMI: write CLKDIV: " + fourbits.toString(2);
-        display.log("KMI: write CLKDIV: " + fourbits.toString(2));
-        this[this.CLKDIV] = fourbits;
-    };
-    // KMIIR Interrupt status register.
-    this.read[this.IR] = function() {
-        return 0;
-    };
-
-    this.read[this.baseaddr + 0xff4] = 0;
-    this.read[this.baseaddr + 0xff8] = 0;
-    this.read[this.baseaddr + 0xffc] = 0;
-}
-
-KMI.prototype.receive_char = function(c) {
-    display.log("KMI: received: " + c);
-    this.char_buffer.push(c);
-    this.gic.send_interrupt(this.irq);
-};
-
-/*
- * ARM PrimeCell Real Time Clock (PL031)
- */
-function RTC() {
-    this.read = new Array();
-    this.write = new Array();
-    this.read[0x10017fe0] = 0;
-    this.read[0x10017fe4] = 0;
-    this.read[0x10017fe8] = 0;
-    this.read[0x10017fec] = 0;
-    this.read[0x10017ff0] = 0;
-    this.read[0x10017ff4] = 0;
-    this.read[0x10017ff8] = 0;
-    this.read[0x10017ffc] = 0;
-}
 
 function GenericInterruptController(baseaddr) {
     this.baseaddr = baseaddr;
@@ -924,14 +762,10 @@ function UART(id, baseaddr, irq, gic) {
 
     this.read[this.FR] = function() {
         var ret = 0;
-        //ret = bitops.set_bit(ret, 7, (uart.tx_fifo.length === 0 ? 1 : 0));
         if (uart.tx_fifo.length === 0)
             ret += (1 << 7);
-        //ret = bitops.set_bit(ret, 6, (uart.rx_fifo.length >= uart.fifo_length ? 1 : 0));
         if (uart.rx_fifo.length >= uart.fifo_length)
             ret += (1 << 6);
-        //ret = bitops.set_bit(ret, 5, (uart.tx_fifo.length >= uart.fifo_length ? 1 : 0));
-        //ret = bitops.set_bit(ret, 4, (uart.rx_fifo.length === 0 ? 1 : 0));
         if (uart.rx_fifo.length === 0)
             ret += (1 << 4);
         //logger.log("UART: read FR: " + ret.toString(16));
@@ -1015,8 +849,6 @@ function UART(id, baseaddr, irq, gic) {
     this.data[this.ICR] = 0;
     this.write[this.ICR] = function(halfword) {
         //logger.log(uart.name + ": write ICR: " + halfword.toString(16));
-        //if (halfword & 0x10)
-        //    uart.sending_rx_irq = false;
         uart.data[uart.ICR] = halfword;
     };
 
@@ -1174,7 +1006,6 @@ function Memory(size) {
 }
 
 Memory.prototype.init = function(buffer) {
-    //ea += ((15 + 3) & ~3);
     if (buffer)
         this.mem = buffer;
     else
@@ -1311,12 +1142,6 @@ function System(configs, options) {
     this.n_interrupts = 0;
     this.stop_after = 0;
     this.function_stack = new Array();
-    this.decode_cache_size = 1000;
-    this.decode_cache = new Array();
-    this.decode_cache_list = new Array();
-    this.decode_cache_hit = 0;
-    this.decode_cache2 = new Array();
-    this.decode_cache2_list = new Array();
     this.state_changed_cb = null;
     this.inst_counter = new Array(); 
 
@@ -1647,8 +1472,6 @@ System.prototype.save_memory = function() {
 System.prototype.restore_memory = function(handler) {
     var system = this;
     var _handler = function(data) {
-        //system.memory = new Memory(this.result.byteLength);
-        //system.memory.init(this.result);
         system.memory = new Memory(data.byteLength);
         system.memory.init(data);
         system.memctlr.memory = system.memory;
@@ -1656,7 +1479,6 @@ System.prototype.restore_memory = function(handler) {
         handler();
     };
     display.log("restoring memory from a file");
-    //this.fs.read("mem.dat", this.memory.size, _handler, false);
     this.fs.fileRead("mem.dat", {text: false}, _handler);
 };
 
@@ -1732,14 +1554,6 @@ function VersatileExpress(configs, options) {
     this.cpu = new CPU_ARMv7(options, this, this.memctlr);
     this.gic = new GenericInterruptController(0x1e000000);
     this.io.register_io("GIC", this.gic);
-    //this.pl180 = new PL180(0x10005000);
-    //this.io.register_io("PL180", this.pl180);
-    //this.keyboard = new KMI(0x10006000, this.irq_base + 12, this.gic);
-    //this.io.register_io("Keyboard", this.keyboard);
-    //this.mouse = new KMI(0x10007000, this.irq_base + 13, this.gic);
-    //this.io.register_io("Mouse", this.mouse);
-    //this.rtc = new RTC();
-    //this.io.register_io("RTC", this.rtc);
     this.uart0 = new UART(0, 0x10009000, this.irq_base + 5, this.gic);
     this.io.register_io("UART0", this.uart0);
     this.timer0 = new SP804(0x10011000, this.irq_base + 2, this.gic);
@@ -1752,22 +1566,6 @@ function VersatileExpress(configs, options) {
     // Dummy for Virtio 9P. It will be override if HTML5 FileSystem is available.
     this.virtio_mmio = new UnimplementedDevice(0x10015000);
     this.io.register_io("VirtioMMIO (disabled)", this.virtio_mmio);
-
-    // Unimplemented Devices
-    this.aaci = new UnimplementedDevice(0x10004000);
-    this.io.register_io("AACI", this.aaci);
-    this.unknown0 = new UnimplementedDevice(0x1000f000);
-    this.io.register_io("Unknown#0", this.unknown0);
-    this.unknown1 = new UnimplementedDevice(0x1001b000);
-    this.io.register_io("Unknown#1", this.unknown1);
-    this.CLCDC = new UnimplementedDevice(0x10020000);
-    this.io.register_io("CLCDC", this.CLCDC);
-    this.DMC = new UnimplementedDevice(0x100e0000);
-    this.io.register_io("DMC", this.DMC);
-    this.SMC = new UnimplementedDevice(0x100e1000);
-    this.io.register_io("SMC", this.SMC);
-    this.GPIO = new UnimplementedDevice(0x100e8000);
-    this.io.register_io("GPIO", this.GPIO);
 
     this.fs = new HTML5FileSystem('/emulator', 50 * 1024 * 1024);
 }
@@ -1796,15 +1594,12 @@ VersatileExpress.prototype.boot = function(params) {
      */
     /*
     this.cpu.regs[0] = 0;
-    //this.cpu.regs[1] = 387; // versatile_pb in arch/arm/tools/mach-types
     this.cpu.regs[1] = 2272; // vexpress in arch/arm/tools/mach-types
     this.cpu.regs[2] = this.taglist_start_addr; // Typical place
     this.cpu.regs[13] = 0x00100000; // SP
     this.cpu.regs[15] = 0x00100000; // PC
     this.cpu.cpsr.m = 0x13; // 10011 Supervisor mode
     this.cpu.log_cpsr();
-    //this.load_binary("initrd.img-2.6.32-5-versatile.mini.bin", 0x00800000);
-    //this.load_binary("zImage-3.3.2-debug-nofs-nonet-lzo-v7-printk", 0x00100000, this.run);
     this.load_binary(params.initrd_url, 0x00800000);
     this.load_binary(params.zImage_url, 0x00100000, this.run);
     */
@@ -1828,7 +1623,6 @@ VersatileExpress.prototype.boot = function(params) {
     this.is_booted = true;
     this.is_running = true;
     this.state_changed();
-    //this.cpu.run();
     display.log("booting up");
 };
 
@@ -1890,8 +1684,6 @@ VersatileExpress.prototype.dump = function() {
     this.cpu.coprocs[15].dump();
     display.log("\nGIC:");
     this.gic.dump();
-    //display.log("\nIO:");
-    //this.io.dump();
     display.log("\nSysRegs:");
     this.sysregs.dump();
     display.log("\nTimer0:");
@@ -1903,7 +1695,6 @@ VersatileExpress.prototype.dump = function() {
     display.log("\n");
     display.log("tick=" + this.tick);
     display.log("insts=" + this.n_instructions);
-    display.log("decode cache hit=" + this.decode_cache_hit);
     display.log("interrupts=" + this.n_interrupts);
     display.log("pending interrupts=" + this.gic.pending_interrupts);
 };
