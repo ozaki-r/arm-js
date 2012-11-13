@@ -387,83 +387,83 @@ function SP804(baseaddr, irq, gic) {
 
     sp804 = this;
     // Load Register, TimerXLoad
-    this.TimerXLoad1 = this.baseaddr;
-    this[this.TimerXLoad1] = 0;
-    this.read[this.TimerXLoad1] = function() {
-        return sp804[sp804.TimerXLoad1];
+    this.Load1 = this.baseaddr;
+    this[this.Load1] = 0;
+    this.read[this.Load1] = function() {
+        return sp804[sp804.oad1];
     };
-    this.write[this.TimerXLoad1] = function(word) {
+    this.write[this.Load1] = function(word) {
         // TODO
-        sp804[sp804.TimerXLoad1] = word;
-        sp804[sp804.TimerXValue1] = word;
+        sp804[sp804.Load1] = word;
+        sp804[sp804.Value1] = word;
     };
 
-    this.TimerXLoad2 = this.baseaddr + 0x20;
-    this[this.TimerXLoad2] = 0;
-    this.read[this.TimerXLoad2] = function() {
-        return sp804[sp804.TimerXLoad2];
+    this.Load2 = this.baseaddr + 0x20;
+    this[this.Load2] = 0;
+    this.read[this.Load2] = function() {
+        return sp804[sp804.Load2];
     };
-    this.write[this.TimerXLoad2] = function(word) {
+    this.write[this.Load2] = function(word) {
         // TODO
-        sp804[sp804.TimerXLoad2] = word;
-        sp804[sp804.TimerXValue2] = word;
+        sp804[sp804.Load2] = word;
+        sp804[sp804.Value2] = word;
     };
 
     // Current Value Register, TimerXValue
     // Read-only
-    this.TimerXValue1 = this.baseaddr + 0x04;
-    this[this.TimerXValue1] = 0xffffffff;
-    this.read[this.TimerXValue1] = function() {
-        return sp804[sp804.TimerXValue1];
+    this.Value1 = this.baseaddr + 0x04;
+    this[this.Value1] = 0xffffffff;
+    this.read[this.Value1] = function() {
+        return sp804[sp804.Value1];
     };
-    this.write[this.TimerXValue1] = function() {
+    this.write[this.Value1] = function() {
         // NOP
         // This is a Linux kernel bug??
     };
 
-    this.TimerXValue2 = this.baseaddr + 0x24;
-    this[this.TimerXValue2] = 0xffffffff;
-    this.read[this.TimerXValue2] = function() {
-        return sp804[sp804.TimerXValue2];
+    this.Value2 = this.baseaddr + 0x24;
+    this[this.Value2] = 0xffffffff;
+    this.read[this.Value2] = function() {
+        return sp804[sp804.Value2];
     };
-    this.write[this.TimerXValue2] = function() {
+    this.write[this.Value2] = function() {
         // NOP
         // This is a Linux kernel bug??
     };
 
     // Control Register, TimerXControl
-    this.TimerXControl1 = this.baseaddr + 0x08;
-    this[this.TimerXControl1] = {TimerEn:0, TimerMode:0, IntEnable:1, TimerPre:0, TimerSize:0, OneShot:0, value:0};
-    this.write[this.TimerXControl1] = function(word) {
-        sp804.write_TimerXControl1(word);
+    this.Control1 = this.baseaddr + 0x08;
+    this[this.Control1] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
+    this.write[this.Control1] = function(word) {
+        sp804.write_Control1(word);
     };
 
-    this.TimerXControl2 = this.baseaddr + 0x28;
-    this[this.TimerXControl2] = {TimerEn:0, TimerMode:0, IntEnable:1, TimerPre:0, TimerSize:0, OneShot:0, value:0};
-    this.write[this.TimerXControl2] = function(word) {
-        sp804.write_TimerXControl2(word);
+    this.Control2 = this.baseaddr + 0x28;
+    this[this.Control2] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
+    this.write[this.Control2] = function(word) {
+        sp804.write_Control2(word);
     };
 
     // Interrupt Clear Register. TimerXIntClr
-    this.TimerXIntClr1 = this.baseaddr + 0x0c;
-    this.write[this.TimerXIntClr1] = function(word) {
+    this.IntClr1 = this.baseaddr + 0x0c;
+    this.write[this.IntClr1] = function(word) {
         // TODO
-        //display.log("TimerXIntClr1: " + word);
+        //display.log("IntClr1: " + word);
     };
 
-    this.TimerXIntClr2 = this.baseaddr + 0x2c;
-    this.write[this.TimerXIntClr2] = function(word) {
+    this.IntClr2 = this.baseaddr + 0x2c;
+    this.write[this.IntClr2] = function(word) {
         // TODO
-        //display.log("TimerXIntClr2: " + word);
+        //display.log("IntClr2: " + word);
     };
 }
 
-SP804.prototype._write_TimerXControl1 = function(ctl) {
-    this[this.TimerXControl1] = ctl;
-    if (ctl.TimerEn) {
+SP804.prototype._write_Control1 = function(ctl) {
+    this[this.Control1] = ctl;
+    if (ctl.En) {
         // Clear old timer
         clearTimeout(this.timeout_timer1.bind(this));
-        var val = this[this.TimerXValue1];
+        var val = this[this.Value1];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     } else {
@@ -471,16 +471,16 @@ SP804.prototype._write_TimerXControl1 = function(ctl) {
     }
 };
 
-SP804.prototype.write_TimerXControl1 = function(word) {
-    this._write_TimerXControl1(this.parse_control_register(word));
+SP804.prototype.write_Control1 = function(word) {
+    this._write_Control1(this.parse_control_register(word));
 };
 
-SP804.prototype._write_TimerXControl2 = function(ctl) {
-    this[this.TimerXControl2] = ctl;
-    if (ctl.TimerEn) {
+SP804.prototype._write_Control2 = function(ctl) {
+    this[this.Control2] = ctl;
+    if (ctl.En) {
         // Clear old timer
         clearTimeout(this.timeout_timer2.bind(this));
-        var val = this[this.TimerXValue2];
+        var val = this[this.Value2];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     } else {
@@ -488,97 +488,97 @@ SP804.prototype._write_TimerXControl2 = function(ctl) {
     }
 };
 
-SP804.prototype.write_TimerXControl2 = function(word) {
-    this._write_TimerXControl2(this.parse_control_register(word));
+SP804.prototype.write_Control2 = function(word) {
+    this._write_Control2(this.parse_control_register(word));
 };
 
 SP804.prototype.save = function() {
     var params = new Object();
-    params.TimerXLoad1 = this[this.TimerXLoad1];
-    params.TimerXLoad2 = this[this.TimerXLoad2];
-    params.TimerXValue1 = this[this.TimerXValue1];
-    params.TimerXValue2 = this[this.TimerXValue2];
-    params.TimerXControl1 = this[this.TimerXControl1];
-    params.TimerXControl2 = this[this.TimerXControl2];
+    params.Load1 = this[this.Load1];
+    params.Load2 = this[this.Load2];
+    params.Value1 = this[this.Value1];
+    params.Value2 = this[this.Value2];
+    params.Control1 = this[this.Control1];
+    params.Control2 = this[this.Control2];
     return params;
 };
 
 SP804.prototype.restore = function(params) {
-    this[this.TimerXLoad1] = params.TimerXLoad1;
-    this[this.TimerXLoad2] = params.TimerXLoad2;
-    this[this.TimerXValue1] = params.TimerXValue1;
-    this[this.TimerXValue2] = params.TimerXValue2;
-    this._write_TimerXControl1(params.TimerXControl1);
-    this._write_TimerXControl2(params.TimerXControl2);
+    this[this.Load1] = params.Load1;
+    this[this.Load2] = params.Load2;
+    this[this.Value1] = params.Value1;
+    this[this.Value2] = params.Value2;
+    this._write_Control1(params.Control1);
+    this._write_Control2(params.Control2);
 };
 
 SP804.prototype.timeout_timer1 = function() {
     //display.log("timer1 timeout");
-    if (this[this.TimerXControl1].IntEnable)
+    if (this[this.Control1].IntEnable)
         this.gic.send_interrupt(this.irq);
-    if (!this[this.TimerXControl1].OneShot) {
-        var val = this[this.TimerXValue1];
+    if (!this[this.Control1].OneShot) {
+        var val = this[this.Value1];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     }
     // XXX: Linux uses timer1 as timer interrupt generator and timer2 as counter.
     // So we can update timer2 value on only timer1 interrupt.
-    this[this.TimerXValue2] -= this[this.TimerXValue1];
-    if (this[this.TimerXValue2] < 0)
-        this[this.TimerXValue2] = 0xffffffff + this[this.TimerXValue2];
+    this[this.Value2] -= this[this.Value1];
+    if (this[this.Value2] < 0)
+        this[this.Value2] = 0xffffffff + this[this.Value2];
 };
 
 SP804.prototype.timeout_timer2 = function() {
     //display.log("timer2 timeout");
-    if (this[this.TimerXControl2].IntEnable)
+    if (this[this.Control2].IntEnable)
         this.gic.send_interrupt(this.irq);
-    if (!this[this.TimerXControl2].OneShot) {
-        var val = this[this.TimerXValue1];
+    if (!this[this.Control2].OneShot) {
+        var val = this[this.Value1];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     }
 };
 
 SP804.prototype.parse_control_register = function(value) {
-    var ctl = {TimerEn:0, TimerMode:0, IntEnable:0, TimerPre:0, TimerSize:0, OneShot:0, value:0};
-    ctl.TimerEn = bitops.get_bit(value, 7);
-    ctl.TimerMode = bitops.get_bit(value, 6);
+    var ctl = {En:0, Mode:0, IntEnable:0, Pre:0, Size:0, OneShot:0, value:0};
+    ctl.En = bitops.get_bit(value, 7);
+    ctl.Mode = bitops.get_bit(value, 6);
     ctl.IntEnable = bitops.get_bit(value, 5);
-    ctl.TimerPre = bitops.get_bits(value, 3, 2);
-    ctl.TimerSize = bitops.get_bit(value, 1);
+    ctl.Pre = bitops.get_bits(value, 3, 2);
+    ctl.Size = bitops.get_bit(value, 1);
     ctl.OneShot = bitops.get_bit(value, 0);
     ctl.value = value;
     return ctl;
 };
 
 SP804.prototype.dump_timer = function(id) {
-    var ctl = this[this["TimerXControl" + id]];
+    var ctl = this[this["Control" + id]];
     var header = "" + id + ": ";
     var msgs = new Array();
-    msgs.push("value=" + toStringHex32(this[this["TimerXValue" + id]]));
-    msgs.push("load=" + toStringHex32(this[this["TimerXLoad" + id]]));
-    msgs.push("TimerEn=" + (ctl.TimerEn ? "enabled" : "disabled"));
-    msgs.push("TimerMode=" + (ctl.TimerMode ? "periodic" : "free-running"));
+    msgs.push("value=" + toStringHex32(this[this["Value" + id]]));
+    msgs.push("load=" + toStringHex32(this[this["Load" + id]]));
+    msgs.push("En=" + (ctl.En ? "enabled" : "disabled"));
+    msgs.push("Mode=" + (ctl.Mode ? "periodic" : "free-running"));
     msgs.push("IntEnable=" + (ctl.IntEnable ? "enabled" : "disabled"));
-    switch (ctl.TimerPre) {
+    switch (ctl.Pre) {
         case 0:
             // 0 stages of prescale, clock is divided by 1
-            msgs.push("TimerPre=0:1");
+            msgs.push("Pre=0:1");
             break;
         case 1:
             // 4 stages of prescale, clock is divided by 16
-            msgs.push("TimerPre=4:16");
+            msgs.push("Pre=4:16");
             break;
         case 2:
             // 8 stages of prescale, clock is divided by 256
-            msgs.push("TimerPre=8:256");
+            msgs.push("Pre=8:256");
             break;
         case 3:
         default:
-            throw "TimerPre" + ctl.TimerPre;
+            throw "Pre" + ctl.Pre;
             break;
     }
-    msgs.push("TimerSize=" + (ctl.TimerSize ? "32bit" : "16bit"));
+    msgs.push("Size=" + (ctl.Size ? "32bit" : "16bit"));
     msgs.push("OneShot=" + (ctl.OneShot ? "oneshot" : "wrapping"));
     display.log(header + msgs.join(', '));
 };
@@ -746,7 +746,7 @@ function UART(id, baseaddr, irq, gic) {
     this.write[this.DR] = function(onebyte) {
         if (!(onebyte >=0 && onebyte <= 127))
             throw "Invalid char: " + onebyte;
-        if (onebyte >=0 && onebyte < 32 && onebyte != 10 && onebyte != 13)
+        if (onebyte >=0 && onebyte < 32 && onebyte != 8 && onebyte != 10 && onebyte != 13)
             display.log("Warning: not char: " + onebyte);
         var str = String.fromCharCode(onebyte);
         //display.log(str);
