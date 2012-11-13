@@ -45,10 +45,10 @@ function SystemRegisters(baseaddr, options) {
         time: (new Date()).getTime(),
         hz: 24*1000*1000
     };
-    var sysregs = this;
+    var that = this;
     this.read[this.CLOCK_24MHZ] = function() {
         var now = (new Date()).getTime();
-        var clock24mhz = sysregs.data[sysregs.CLOCK_24MHZ];
+        var clock24mhz = that.data[that.CLOCK_24MHZ];
         var old = clock24mhz.time;
         clock24mhz.time = now;
         var passing_ticks = (now - old) * (clock24mhz.hz / 1000);
@@ -58,11 +58,11 @@ function SystemRegisters(baseaddr, options) {
     // XXX: update clock to prevent overflow
     // FIXME: should stop when the emulator is stopped
     function update_clock() {
-        sysregs.read[sysregs.CLOCK_24MHZ]();
+        that.read[that.CLOCK_24MHZ]();
         setTimeout(update_clock, 1000);
     }
     setTimeout(update_clock, 1000);
-    this.write[sysregs.CLOCK_24MHZ] = function(word) {
+    this.write[that.CLOCK_24MHZ] = function(word) {
         throw "24MHz clock write";
     };
 }
@@ -106,22 +106,22 @@ function GenericInterruptController(baseaddr) {
     /*
      * Distributor registers
      */
-    var gic = this;
+    var that = this;
     // Distributor Control Register (ICDDCR)
     this.ICDDCR = this.baseaddr + 0x1000;
     this[this.ICDDCR] = 0;
     this.read[this.ICDDCR] = function() {
-        return gic[gic.ICDDCR];
+        return that[that.ICDDCR];
     };
     this.write[this.ICDDCR] = function(word) {
         if (bitops.get_bit(word, 0)) {
-            gic.enabled = true;
+            that.enabled = true;
             display.log("GIC: started monitoring interrupts");
         } else {
-            gic.enabled = false;
+            that.enabled = false;
             display.log("GIC: stopped monitoring interrupts");
         }
-        return gic[gic.ICDDCR] = word;
+        return that[that.ICDDCR] = word;
     };
 
     // Interrupt Controller Type Register (ICDICTR)
@@ -132,68 +132,68 @@ function GenericInterruptController(baseaddr) {
     this[this.ICDICTR] = bitops.set_bits(this[this.ICDICTR], 7, 5, this.CPUNumber);
     this[this.ICDICTR] = bitops.set_bits(this[this.ICDICTR], 4, 0, this.ITLinesNumber);
     this.read[this.ICDICTR] = function() {
-        return gic[gic.ICDICTR];
+        return that[that.ICDICTR];
     };
 
     var i;
     // Interrupt Configuration Registers (ICDICFRn)
     for (i=0; i < 2*(this.ITLinesNumber+1); i++) {
         this["ICDICFR" + i] = this.baseaddr + 0x1c00 + i*4;
-        this[gic["ICDICFR" + i]] = 0;
+        this[that["ICDICFR" + i]] = 0;
         this.read[this["ICDICFR" + i]] = function() {
-            return gic[gic["ICDICFR" + i]];
+            return that[that["ICDICFR" + i]];
         };
         this.write[this["ICDICFR" + i]] = function(word) {
             // TODO
-            gic[gic["ICDICFR" + i]] = word;
+            that[that["ICDICFR" + i]] = word;
         };
     }
     // Interrupt Processor Targets Registers (ICDIPTRn)
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["ICDIPTR" + i] = this.baseaddr + 0x1800 + i*4;
-        this[gic["ICDIPTR" + i]] = 0;
+        this[that["ICDIPTR" + i]] = 0;
         this.read[this["ICDIPTR" + i]] = function() {
-            return gic[gic["ICDIPTR" + i]];
+            return that[that["ICDIPTR" + i]];
         };
         this.write[this["ICDIPTR" + i]] = function(word) {
             // TODO
-            gic[gic["ICDIPTR" + i]] = word;
+            that[that["ICDIPTR" + i]] = word;
         };
     }
     // Interrupt Priority Registers (ICDIPRn)
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["ICDIPR" + i] = this.baseaddr + 0x1400 + i*4;
-        this[gic["ICDIPR" + i]] = 0;
+        this[that["ICDIPR" + i]] = 0;
         this.read[this["ICDIPR" + i]] = function() {
-            return gic[gic["ICDIPR" + i]];
+            return that[that["ICDIPR" + i]];
         };
         this.write[this["ICDIPR" + i]] = function(word) {
             // TODO
-            gic[gic["ICDIPR" + i]] = word;
+            that[that["ICDIPR" + i]] = word;
         };
     }
     // Interrupt Clear-Enable Registers (ICDICERn)
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ICDICER" + i] = this.baseaddr + 0x1180 + i*4;
-        this[gic["ICDICER" + i]] = 0;
+        this[that["ICDICER" + i]] = 0;
         this.read[this["ICDICER" + i]] = function() {
-            return gic[gic["ICDICER" + i]];
+            return that[that["ICDICER" + i]];
         };
         this.write[this["ICDICER" + i]] = function(word) {
             // TODO
-            gic[gic["ICDICER" + i]] = word;
+            that[that["ICDICER" + i]] = word;
         };
     }
     // Interrupt Set-Enable Registers (ICDISERn)
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ICDISER" + i] = this.baseaddr + 0x1100 + i*4;
-        this[gic["ICDISER" + i]] = 0;
+        this[that["ICDISER" + i]] = 0;
         this.read[this["ICDISER" + i]] = function() {
-            return gic[gic["ICDISER" + i]];
+            return that[that["ICDISER" + i]];
         };
         this.write[this["ICDISER" + i]] = function(word) {
             // TODO
-            gic[gic["ICDISER" + i]] = word;
+            that[that["ICDISER" + i]] = word;
         };
     }
 
@@ -205,7 +205,7 @@ function GenericInterruptController(baseaddr) {
     this[this.ICCICR] = 0;
     this.write[this.ICCICR] = function(word) {
         // TODO
-        gic[gic.ICCICR] = word;
+        that[that.ICCICR] = word;
     };
 
     // Interrupt Priority Mask Register (ICCPMR)
@@ -213,17 +213,17 @@ function GenericInterruptController(baseaddr) {
     this[this.ICCPMR] = 0;
     this.write[this.ICCPMR] = function(word) {
         // TODO
-        gic[gic.ICCPMR] = word;
+        that[that.ICCPMR] = word;
     };
 
     // Interrupt Acknowledge Register (ICCIAR)
     this.ICCIAR = this.baseaddr + 0x10c;
     this.read[this.ICCIAR] = function() {
-        if (gic.sent_irqs.length === 0) {
+        if (that.sent_irqs.length === 0) {
             // There is no pending IRQ
             return 1023;
         }
-        var irq = gic.sent_irqs[0];
+        var irq = that.sent_irqs[0];
         //display.log("irq=" + irq);
         return irq;
     };
@@ -231,11 +231,11 @@ function GenericInterruptController(baseaddr) {
     // End of Interrupt Register (ICCEOIR)
     this.ICCEOIR = this.baseaddr + 0x110;
     this.write[this.ICCEOIR] = function(word) {
-        if (gic.sent_irqs.length === 0)
+        if (that.sent_irqs.length === 0)
             return;
         var eoi = word & 0x3ff;
-        if (gic.sent_irqs[0] == eoi)
-            gic.sent_irqs.shift();
+        if (that.sent_irqs[0] == eoi)
+            that.sent_irqs.shift();
         else
             throw "irq != eoi";
     };
@@ -385,28 +385,28 @@ function SP804(baseaddr, irq, gic) {
     this.read[this.baseaddr + 0xff8] = 0;
     this.read[this.baseaddr + 0xffc] = 0;
 
-    sp804 = this;
+    var that = this;
     // Load Register, TimerXLoad
     this.Load1 = this.baseaddr;
     this[this.Load1] = 0;
     this.read[this.Load1] = function() {
-        return sp804[sp804.oad1];
+        return that[that.oad1];
     };
     this.write[this.Load1] = function(word) {
         // TODO
-        sp804[sp804.Load1] = word;
-        sp804[sp804.Value1] = word;
+        that[that.Load1] = word;
+        that[that.Value1] = word;
     };
 
     this.Load2 = this.baseaddr + 0x20;
     this[this.Load2] = 0;
     this.read[this.Load2] = function() {
-        return sp804[sp804.Load2];
+        return that[that.Load2];
     };
     this.write[this.Load2] = function(word) {
         // TODO
-        sp804[sp804.Load2] = word;
-        sp804[sp804.Value2] = word;
+        that[that.Load2] = word;
+        that[that.Value2] = word;
     };
 
     // Current Value Register, TimerXValue
@@ -414,7 +414,7 @@ function SP804(baseaddr, irq, gic) {
     this.Value1 = this.baseaddr + 0x04;
     this[this.Value1] = 0xffffffff;
     this.read[this.Value1] = function() {
-        return sp804[sp804.Value1];
+        return that[that.Value1];
     };
     this.write[this.Value1] = function() {
         // NOP
@@ -424,7 +424,7 @@ function SP804(baseaddr, irq, gic) {
     this.Value2 = this.baseaddr + 0x24;
     this[this.Value2] = 0xffffffff;
     this.read[this.Value2] = function() {
-        return sp804[sp804.Value2];
+        return that[that.Value2];
     };
     this.write[this.Value2] = function() {
         // NOP
@@ -435,13 +435,13 @@ function SP804(baseaddr, irq, gic) {
     this.Control1 = this.baseaddr + 0x08;
     this[this.Control1] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
     this.write[this.Control1] = function(word) {
-        sp804.write_Control1(word);
+        that.write_Control1(word);
     };
 
     this.Control2 = this.baseaddr + 0x28;
     this[this.Control2] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
     this.write[this.Control2] = function(word) {
-        sp804.write_Control2(word);
+        that.write_Control2(word);
     };
 
     // Interrupt Clear Register. TimerXIntClr
@@ -615,10 +615,10 @@ function SystemController(baseaddr) {
     ctrl0 = bitops.set_bit(ctrl0, 19, 1);
     ctrl0 = bitops.set_bit(ctrl0, 21, 1);
 
-    var sysctrl = this;
+    var that = this;
     this.data[this.SYS_CTRL0] = ctrl0;
     this.read[this.SYS_CTRL0] = function() {
-        return sysctrl.data[sysctrl.SYS_CTRL0];
+        return that.data[that.SYS_CTRL0];
     };
     this.read[this.SYS_CTRL1] = 0;
 }
@@ -742,7 +742,7 @@ function UART(id, baseaddr, irq, gic) {
     this.MIS = this.baseaddr + 0x40;
     this.ICR = this.baseaddr + 0x44;
 
-    var uart = this;
+    var that = this;
     this.write[this.DR] = function(onebyte) {
         if (!(onebyte >=0 && onebyte <= 127))
             throw "Invalid char: " + onebyte;
@@ -750,23 +750,23 @@ function UART(id, baseaddr, irq, gic) {
             display.log("Warning: not char: " + onebyte);
         var str = String.fromCharCode(onebyte);
         //display.log(str);
-        uart.output_char(str);
+        that.output_char(str);
     };
     this.read[this.DR] = function() {
-        //logger.log(uart.name + ": read DR");
-        if (uart.rx_fifo.length > 0)
-            return uart.rx_fifo.shift();
+        //logger.log(that.name + ": read DR");
+        if (that.rx_fifo.length > 0)
+            return that.rx_fifo.shift();
         else
             return 0;
     };
 
     this.read[this.FR] = function() {
         var ret = 0;
-        if (uart.tx_fifo.length === 0)
+        if (that.tx_fifo.length === 0)
             ret += (1 << 7);
-        if (uart.rx_fifo.length >= uart.fifo_length)
+        if (that.rx_fifo.length >= that.fifo_length)
             ret += (1 << 6);
-        if (uart.rx_fifo.length === 0)
+        if (that.rx_fifo.length === 0)
             ret += (1 << 4);
         //logger.log("UART: read FR: " + ret.toString(16));
         return ret;
@@ -774,82 +774,82 @@ function UART(id, baseaddr, irq, gic) {
 
     this.data[this.CR] = 0x300;
     this.read[this.CR] = function() {
-        //logger.log(uart.name + ": read CR");
-        return uart.data[uart.CR];
+        //logger.log(that.name + ": read CR");
+        return that.data[that.CR];
     };
 
     this.write[this.CR] = function(halfword) {
-        //logger.log(uart.name + ": write CR: " + halfword.toString(16));
-        var old = (uart.data[uart.CR] & 1) ? true : false;
-        uart.enabled = (halfword & 1) ? true : false;
-        uart.data[uart.CR] = halfword;
-        if (!old && uart.enabled) {
-            //logger.log(uart.name + ": enabled");
-            uart.enable();
+        //logger.log(that.name + ": write CR: " + halfword.toString(16));
+        var old = (that.data[that.CR] & 1) ? true : false;
+        that.enabled = (halfword & 1) ? true : false;
+        that.data[that.CR] = halfword;
+        if (!old && that.enabled) {
+            //logger.log(that.name + ": enabled");
+            that.enable();
         }
         //display.log("RX" + bitops.get_bit(halfword, 9));
         //display.log("TX" + bitops.get_bit(halfword, 8));
         if (halfword & 0x200)
-            uart.rx_enabled = true;
+            that.rx_enabled = true;
         else
-            uart.rx_enabled = false;
+            that.rx_enabled = false;
         if (halfword & 0x100)
-            uart.tx_enabled = true;
+            that.tx_enabled = true;
         else
-            uart.tx_enabled = false;
+            that.tx_enabled = false;
     };
 
     this.write[this.IBRD] = function(halfword) {
-        //logger.log(uart.name + ": write IBRD: " + halfword.toString(16));
-        uart.data[uart.IBRD] = halfword;
+        //logger.log(that.name + ": write IBRD: " + halfword.toString(16));
+        that.data[that.IBRD] = halfword;
     };
 
     this.write[this.FBRD] = function(onebyte) {
-        //logger.log(uart.name + ": write FBRD: " + onebyte.toString(16));
-        uart.data[uart.FBRD] = onebyte;
+        //logger.log(that.name + ": write FBRD: " + onebyte.toString(16));
+        that.data[that.FBRD] = onebyte;
     };
 
     this.write[this.LCR_H] = function(onebyte) {
-        //logger.log(uart.name + ": write LCR_H: " + onebyte.toString(16));
-        uart.update_fifo_onoff(onebyte);
-        uart.data[uart.LCR_H] = onebyte;
+        //logger.log(that.name + ": write LCR_H: " + onebyte.toString(16));
+        that.update_fifo_onoff(onebyte);
+        that.data[that.LCR_H] = onebyte;
     };
 
     this.data[this.IFLS] = 0;
     this.write[this.IFLS] = function(halfword) {
-        //logger.log(uart.name + ": write IFLS: " + halfword.toString(16));
-        uart.update_fifo_level(halfword);
-        uart.data[uart.IFLS] = halfword;
+        //logger.log(that.name + ": write IFLS: " + halfword.toString(16));
+        that.update_fifo_level(halfword);
+        that.data[that.IFLS] = halfword;
     };
 
     this.data[this.IMSC] = 0;
     this.read[this.IMSC] = function() {
-        //logger.log(uart.name + ": read IMSC");
-        return uart.data[uart.IMSC];
+        //logger.log(that.name + ": read IMSC");
+        return that.data[that.IMSC];
     };
     this.write[this.IMSC] = function(halfword) {
-        //logger.log(uart.name + ": write IMSC: " + halfword.toString(16));
-        uart.tx_int_enabled = (halfword & 0x20) ? true : false;
-        uart.rx_int_enabled = (halfword & 0x10) ? true : false;
-        if (uart.tx_int_enabled && uart.tx_fifo.length === 0)
-            uart.gic.send_interrupt(uart.irq);
-        uart.data[uart.IMSC] = halfword;
+        //logger.log(that.name + ": write IMSC: " + halfword.toString(16));
+        that.tx_int_enabled = (halfword & 0x20) ? true : false;
+        that.rx_int_enabled = (halfword & 0x10) ? true : false;
+        if (that.tx_int_enabled && that.tx_fifo.length === 0)
+            that.gic.send_interrupt(that.irq);
+        that.data[that.IMSC] = halfword;
     };
 
     this.read[this.MIS] = function() {
         var ret = 0;
-        if (!uart.tx_fifo.length)
+        if (!that.tx_fifo.length)
             ret += (1 << 5);
-        if (uart.rx_fifo.length)
+        if (that.rx_fifo.length)
             ret += (1 << 4);
-        //logger.log(uart.name + ": read MIS: " + ret);
+        //logger.log(that.name + ": read MIS: " + ret);
         return ret;
     };
 
     this.data[this.ICR] = 0;
     this.write[this.ICR] = function(halfword) {
-        //logger.log(uart.name + ": write ICR: " + halfword.toString(16));
-        uart.data[uart.ICR] = halfword;
+        //logger.log(that.name + ": write ICR: " + halfword.toString(16));
+        that.data[that.ICR] = halfword;
     };
 
     this.read[this.baseaddr + 0xfe0] = 0x11;
@@ -905,10 +905,10 @@ UART.prototype.input_char = function(str) {
         if (!this.fifo_enabled || this.rx_fifo.length > this.rx_fifo_level) {
             this.gic.send_interrupt(this.irq);
         } else {
-            var uart = this;
+            var that = this;
             setTimeout(function () {
-                    if (uart.rx_fifo.length > 0)
-                        uart.gic.send_interrupt(uart.irq);
+                    if (that.rx_fifo.length > 0)
+                        that.gic.send_interrupt(that.irq);
                 }, 10);
         }
     }
@@ -1163,14 +1163,14 @@ function System(configs, options) {
 }
 
 System.prototype.load_binary = function(url, phyaddr, cb) {
-    var system = this;
+    var that = this;
     $.get(url, null, function(data, textStatus, XMLHttpRequest) {
             var length = data.length;
             for (var i = 0; i < length; i++) {
-                system.memctlr.st_byte(phyaddr + i, data.charCodeAt(i));
+                that.memctlr.st_byte(phyaddr + i, data.charCodeAt(i));
             }
             if (cb)
-                cb(system);
+                cb(that);
         }, "binary");
 };
 
@@ -1470,11 +1470,11 @@ System.prototype.save_memory = function() {
 };
 
 System.prototype.restore_memory = function(handler) {
-    var system = this;
+    var that = this;
     var _handler = function(data) {
-        system.memory = new Memory(data.byteLength);
-        system.memory.init(data);
-        system.memctlr.memory = system.memory;
+        that.memory = new Memory(data.byteLength);
+        that.memory.init(data);
+        that.memctlr.memory = that.memory;
         display.log("memory restored");
         handler();
     };
@@ -1647,28 +1647,28 @@ VersatileExpress.prototype.save = function() {
 };
 
 VersatileExpress.prototype.restore = function() {
-    var system = this;
+    var that = this;
     var handler = function(data) {
         var params = JSON.parse(data);
         // Unmarshal
-        system.cpu.restore(params.cpu);
-        var cp15 = system.cpu.coprocs[15];
+        that.cpu.restore(params.cpu);
+        var cp15 = that.cpu.coprocs[15];
         cp15.restore(params.cp15);
-        system.cpu.mmu.restore(params.mmu);
-        system.tick = params.tick;
-        system.n_instructions = params.n_instructions;
-        system.gic.restore(params.gic);
-        system.timer0.restore(params.timer0);
-        system.timer1.restore(params.timer1);
-        system.uart0.restore(params.uart0);
-        system.sysctrl.restore(params.sysctrl);
-        system.virtio_mmio.restore(params.virtio_mmio);
+        that.cpu.mmu.restore(params.mmu);
+        that.tick = params.tick;
+        that.n_instructions = params.n_instructions;
+        that.gic.restore(params.gic);
+        that.timer0.restore(params.timer0);
+        that.timer1.restore(params.timer1);
+        that.uart0.restore(params.uart0);
+        that.sysctrl.restore(params.sysctrl);
+        that.virtio_mmio.restore(params.virtio_mmio);
 
-        system.restore_memory(function() {
+        that.restore_memory(function() {
             display.log("system restored");
-            system.is_booted = true;
-            system.is_running = false;
-            system.state_changed();
+            that.is_booted = true;
+            that.is_running = false;
+            that.state_changed();
         });
     };
     this.fs.fileRead("system.json", {text: true}, handler);
