@@ -1527,7 +1527,7 @@ function VersatileExpress(configs, options) {
     this.io.register_io("sysregs", this.sysregs);
     this.memory = new Memory(this.configs.memory_size);
     this.memctlr = new MemoryController(options, this.memory, this.io);
-    this.cpu = new CPU_ARMv7(options, this, this.memctlr);
+    this.cpu = new ARMv7_CPU(options, this, this.memctlr);
     this.gic = new GenericInterruptController(0x1e000000);
     this.io.register_io("GIC", this.gic);
     this.uart0 = new UART(0, 0x10009000, this.irq_base + 5, this.gic);
