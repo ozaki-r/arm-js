@@ -177,7 +177,7 @@ function ARMv7_CP15(options, cpu) {
      */
     var ttbcr = 0;
 
-    var cp15 = this;
+    var that = this;
     var mmu = this.cpu.mmu;
     this.regs = new Array();
     this.regs_w = new Array();
@@ -211,29 +211,29 @@ function ARMv7_CP15(options, cpu) {
     this.regs[this.TTBR1] = ttbr1;
     this.regs[this.CSSELR] = csselr;
 
-    this.regs_w[this.CSSELR] = function (word) {cp15.regs[cp15.CSSELR] = word;};
+    this.regs_w[this.CSSELR] = function (word) {that.regs[that.CSSELR] = word;};
 
     this.regs_w[this.TTBCR] = function (word) {
         display.log("TTBCR");
-        cp15.regs[cp15.TTBCR] = word;
+        that.regs[that.TTBCR] = word;
         var width = bitops.get_bits(word, 2, 0);
-        var ttbr0 = cp15.regs[cp15.TTBR0];
+        var ttbr0 = that.regs[that.TTBR0];
         mmu.width = width;
         mmu.mask = (1 << (31 - width - 20 + 1)) - 1;
         mmu.baseaddr0 = bitops.clear_bits(ttbr0, 13 - width, 0);
-        cp15.log_value(word, "word");
-        cp15.log_value(mmu.baseaddr0, "baseaddr0 in ttbcr");
+        that.log_value(word, "word");
+        that.log_value(mmu.baseaddr0, "baseaddr0 in ttbcr");
         if (width) {
             throw "width > 0";
-            var ttbr1 = cp15.regs[cp15.TTBR1];
+            var ttbr1 = that.regs[that.TTBR1];
             mmu.baseaddr1 = bitops.clear_bits(ttbr1, 13, 0);
-            cp15.log_value(word, "word");
-            cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbcr");
+            that.log_value(word, "word");
+            that.log_value(mmu.baseaddr1, "baseaddr1 in ttbcr");
         }
         display.log("TTBCR called.");
     };
     this.regs_w[this.SCTLR] = function (word) {
-        cp15.regs[cp15.SCTLR] = word;
+        that.regs[that.SCTLR] = word;
         if (word & 1) {
             mmu.enabled = true;
         } else {
@@ -241,9 +241,9 @@ function ARMv7_CP15(options, cpu) {
         }
         if (!(word & 0x01000000)) { // SCTLR.VE[24]
             if (word & 0x00002000) { // SCTLR.V[13]
-                cp15.interrupt_vector_address = 0xffff0000;
+                that.interrupt_vector_address = 0xffff0000;
             } else {
-                cp15.interrupt_vector_address = 0x00000000;
+                that.interrupt_vector_address = 0x00000000;
             }
         }
         if (word & 2) {// SCTLR.A[1]
@@ -253,33 +253,33 @@ function ARMv7_CP15(options, cpu) {
             mmu.check_unaligned = false;
         }
         // Always 1
-        cp15.regs[cp15.SCTLR] = bitops.set_bit(cp15.regs[cp15.SCTLR], 22, 1);
+        that.regs[that.SCTLR] = bitops.set_bit(that.regs[that.SCTLR], 22, 1);
     };
 
     this.regs_w[this.CPACR] = function (word) {
         display.log("CPACR write: " + word.toString(16));
-        cp15.regs[cp15.CPACR] = word;
+        that.regs[that.CPACR] = word;
     };
 
     this.regs_w[this.TTBR0] = function (word) {
         display.log("TTBR0");
-        cp15.regs[cp15.TTBR0] = word;
+        that.regs[that.TTBR0] = word;
         var ttbr0 = word;
         mmu.baseaddr0 = bitops.clear_bits(ttbr0, 13 - mmu.width, 0);
-        if (cp15.options.enable_logger) {
-            cp15.log_value(word, "ttbr0");
-            cp15.log_value(mmu.baseaddr0, "baseaddr0 in ttbr0");
+        if (that.options.enable_logger) {
+            that.log_value(word, "ttbr0");
+            that.log_value(mmu.baseaddr0, "baseaddr0 in ttbr0");
         }
     };
 
     this.regs_w[this.TTBR1] = function (word) {
         display.log("TTBR1");
-        cp15.regs[cp15.TTBR1] = word;
+        that.regs[that.TTBR1] = word;
         var ttbr1 = word;
         mmu.baseaddr1 = bitops.clear_bits(ttbr1, 13, 0);
-        if (cp15.options.enable_logger) {
-            cp15.log_value(word, "ttbr1");
-            cp15.log_value(mmu.baseaddr1, "baseaddr1 in ttbr1");
+        if (that.options.enable_logger) {
+            that.log_value(word, "ttbr1");
+            that.log_value(mmu.baseaddr1, "baseaddr1 in ttbr1");
         }
     };
 
@@ -301,9 +301,9 @@ function ARMv7_CP15(options, cpu) {
     this.DACR    = [3, 0, 0, 0];
     this.regs[this.DACR] = dacr;
     this.regs_w[this.DACR] = function (word) {
-        cp15.regs[cp15.DACR] = word;
+        that.regs[that.DACR] = word;
         for (var i=0; i < 16; i++) {
-            cp15.domains[i] = bitops.get_bits(word, i*2+1, i*2);
+            that.domains[i] = bitops.get_bits(word, i*2+1, i*2);
         }
     };
 
@@ -395,13 +395,13 @@ function ARMv7_CP15(options, cpu) {
     this.NMRR = [10, 0, 2, 1]; // c10, Normal Memory Remap Register (NMRR)
 
     this.regs_w[this.PRRR] = function (word) {
-        cp15.regs[cp15.PRRR] = word;
-        cp15.dump_value(word, "PRRR");
+        that.regs[that.PRRR] = word;
+        that.dump_value(word, "PRRR");
         // TODO
     };
     this.regs_w[this.NMRR] = function (word) {
-        cp15.regs[cp15.NMRR] = word;
-        cp15.dump_value(word, "NMRR");
+        that.regs[that.NMRR] = word;
+        that.dump_value(word, "NMRR");
         // TODO
     };
 
@@ -411,22 +411,22 @@ function ARMv7_CP15(options, cpu) {
     this.regs_w[this.CONTEXTIDR] = function (word) {
         var procid = (word >>> 8) & 0x00ffffff;
         var asid = word & 0xff;
-        var old_asid = cp15.regs[cp15.CONTEXTIDR] & 0xff;
+        var old_asid = that.regs[that.CONTEXTIDR] & 0xff;
         display.log("PROCID=" + procid + ", ASID=" + asid + ", ASID(old)=" + old_asid);
         mmu.asid = asid;
-        cp15.regs[cp15.CONTEXTIDR] = word;
+        that.regs[that.CONTEXTIDR] = word;
     };
 
     // Software Thread ID registers
     this.TPIDRURW = [13, 0, 0, 2]; // User Read/Write Thread ID Register, TPIDRURW
     this.regs[this.TPIDRURW] = 0;
     this.regs_w[this.TPIDRURW] = function (word) {
-        cp15.regs[cp15.TPIDRURW] = word;
+        that.regs[that.TPIDRURW] = word;
     };
     this.TPIDRURO = [13, 0, 0, 3]; // User Read-only Thread ID Register, TPIDRURO
     this.regs[this.TPIDRURO] = 0;
     this.regs_w[this.TPIDRURO] = function (word) {
-        cp15.regs[cp15.TPIDRURO] = word;
+        that.regs[that.TPIDRURO] = word;
     };
 }
 
