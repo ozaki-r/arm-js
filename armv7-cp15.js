@@ -22,7 +22,6 @@ function ARMv7_CP15(options, cpu) {
     // [15:12] != 0x0 and != 0x7
     midr = bitops.set_bits(midr, 15, 12, 0xf);
     midr = bitops.set_bits(midr, 3, 0, 0x1); // Minor Revison Number
-    this.MIDR = midr; // ARMv7
 
     /*
      * CTR: Cache Type Register
@@ -98,7 +97,6 @@ function ARMv7_CP15(options, cpu) {
     id_mmfr1 = bitops.set_bits(id_mmfr1, 11, 8, 0); // L1 Harvard cache s/w
     id_mmfr1 = bitops.set_bits(id_mmfr1, 7, 4, 0); // L1 unified cache VA
     id_mmfr1 = bitops.set_bits(id_mmfr1, 3, 0, 0); // L1 Harvard cache VA
-    this.ID_MMFR1 = id_mmfr1;
     
     var id_mmfr0 = 0;
     id_mmfr0 = bitops.set_bits(id_mmfr1, 31, 28, 0); // Reserved, Read-As-Zero
@@ -111,7 +109,6 @@ function ARMv7_CP15(options, cpu) {
     id_mmfr0 = bitops.set_bits(id_mmfr1, 7, 4, 0); // PMSA support
     // VMSAv7 supported, with support for remapping and the access flag. ARMv7-A profile.
     id_mmfr0 = bitops.set_bits(id_mmfr1, 3, 0, 3); // VMSA support
-    this.ID_MMFR0 = id_mmfr0;
     
     // c0, Cache Size ID Registers (CCSIDR)
     /*
