@@ -4,79 +4,13 @@
  * Copyright 2012, Ryota Ozaki
  * Dual licensed under the MIT or GPL Version 2 licenses.
  */
-/*
- * System Registers
- */
-function SystemRegisters(baseaddr, options) {
-    this.baseaddr = baseaddr;
+function Device() {
+    this.baseaddr = 0;
     this.read = new Array();
     this.write = new Array();
-    this.data = new Array();
+    this.data = new Object();
 
-    this.ID          = this.baseaddr + 0x00;
-    this.SW          = this.baseaddr + 0x04;
-    this.LED         = this.baseaddr + 0x08;
-    this.CLOCK_24MHZ = this.baseaddr + 0x5c;
-    this.MISC        = this.baseaddr + 0x60;
-    this.PROCID0     = this.baseaddr + 0x84;
-
-    var id = 0;
-    id = bitops.set_bits(id, 31, 28, 1); // Rev B
-    id = bitops.set_bits(id, 27, 16, 0x190); // HBI
-    id = bitops.set_bits(id, 15, 12, 0xf); // all builds
-    id = bitops.set_bits(id, 11, 8, 0x5); // AXI
-    id = bitops.set_bits(id, 7, 0, 0); // FPGA build
-    this.read[this.ID] = id;
-    this.read[this.SW] = 0;
-    this.read[this.LED] = 0;
-    this.read[this.MISC] = 0;
-
-    var procid0 = 0;
-    //procid0 = bitops.set_bits(procid0, 31, 24, 0x12); // Cortex-A5
-    procid0 = bitops.set_bits(procid0, 31, 24, 0x0c); // CA9x4
-    procid0 = bitops.set_bits(procid0, 11, 0, 0x191); // CoreTile Express
-
-    this.read[this.PROCID0] = function() {
-        return procid0;
-    };
-    // 24 MHz clock
-    this.data["CLOCK_24MHZ"] = {
-        clock: 0,
-        time: (new Date()).getTime(),
-        hz: 24*1000*1000
-    };
-    var that = this;
-    this.read[this.CLOCK_24MHZ] = function() {
-        var now = (new Date()).getTime();
-        var clock24mhz = that.data["CLOCK_24MHZ"];
-        var old = clock24mhz.time;
-        clock24mhz.time = now;
-        var passing_ticks = (now - old) * (clock24mhz.hz / 1000);
-        clock24mhz.clock = (clock24mhz.clock + passing_ticks) % 0x100000000;
-        return clock24mhz.clock;
-    };
-    // XXX: update clock to prevent overflow
-    // FIXME: should stop when the emulator is stopped
-    function update_clock() {
-        that.read[that.CLOCK_24MHZ]();
-        setTimeout(update_clock, 1000);
-    }
-    setTimeout(update_clock, 1000);
-    this.write[that.CLOCK_24MHZ] = function(word) {
-        throw "24MHz clock write";
-    };
-}
-
-SystemRegisters.prototype.dump = function() {
-    display.log("CLOCK_24MHz=" + this.data["CLOCK_24MHZ"].time);
-};
-
-function UnimplementedDevice(baseaddr) {
-    this.baseaddr = baseaddr;
-
-    this.read = new Array();
-    this.write = new Array();
-
+    // Peripheral Identification Registers
     this.read[this.baseaddr + 0xfe0] = 0;
     this.read[this.baseaddr + 0xfe4] = 0;
     this.read[this.baseaddr + 0xfe8] = 0;
@@ -87,13 +21,121 @@ function UnimplementedDevice(baseaddr) {
     this.read[this.baseaddr + 0xffc] = 0;
 };
 
+Device.prototype.register_readonly = function(name, initval, cb_r) {
+    if (cb_r) {
+        this.data[name] = initval;
+        this.read[this[name]] = cb_r;
+    } else {
+        this.read[this[name]] = initval;
+    }
+};
+
+Device.prototype.register_writeonly = function(name, cb_w) {
+    if (cb_w) {
+        this.write[this[name]] = cb_w;
+    } else {
+        var that = this;
+        this.write[this[name]] = function(word) {
+            that.data[name] = word;
+        };
+    }
+};
+
+Device.prototype.register_writable = function(name, initval, cb_r, cb_w) {
+    this.data[name] = initval;
+    var that = this;
+    if (cb_r) {
+        this.read[this[name]] = cb_r;
+    } else {
+        this.read[this[name]] = function() {
+            return that.data[name];
+        };
+    }
+    if (cb_w) {
+        this.write[this[name]] = cb_w;
+    } else {
+        this.write[this[name]] = function(word) {
+            that.data[name] = word;
+        };
+    }
+};
+
+/*
+ * System Registers
+ */
+function SystemRegisters(baseaddr, options) {
+    this.baseaddr = baseaddr;
+
+    this.ID          = this.baseaddr + 0x00;
+    this.SW          = this.baseaddr + 0x04;
+    this.LED         = this.baseaddr + 0x08;
+    this.CLOCK_24MHZ = this.baseaddr + 0x5c;
+    this.MISC        = this.baseaddr + 0x60;
+    this.PROCID0     = this.baseaddr + 0x84;
+
+    var that = this;
+
+    var id = 0;
+    id = bitops.set_bits(id, 31, 28, 1); // Rev B
+    id = bitops.set_bits(id, 27, 16, 0x190); // HBI
+    id = bitops.set_bits(id, 15, 12, 0xf); // all builds
+    id = bitops.set_bits(id, 11, 8, 0x5); // AXI
+    id = bitops.set_bits(id, 7, 0, 0); // FPGA build
+    this.register_readonly("ID", id);
+
+    this.register_readonly("SW", 0);
+    this.register_readonly("LED", 0);
+    this.register_readonly("MISC", 0);
+
+    var procid0 = 0;
+    //procid0 = bitops.set_bits(procid0, 31, 24, 0x12); // Cortex-A5
+    procid0 = bitops.set_bits(procid0, 31, 24, 0x0c); // CA9x4
+    procid0 = bitops.set_bits(procid0, 11, 0, 0x191); // CoreTile Express
+    this.register_readonly("PROCID0", procid0);
+
+    // 24 MHz clock
+    var clock_24mhz = {
+        clock: 0,
+        time: (new Date()).getTime(),
+        hz: 24*1000*1000
+    };
+    this.register_writable("CLOCK_24MHZ", clock_24mhz, function() {
+        var now = (new Date()).getTime();
+        var clock24mhz = that.data["CLOCK_24MHZ"];
+        var old = clock24mhz.time;
+        clock24mhz.time = now;
+        var passing_ticks = (now - old) * (clock24mhz.hz / 1000);
+        clock24mhz.clock = (clock24mhz.clock + passing_ticks) % 0x100000000;
+        return clock24mhz.clock;
+    }, function(word) {
+        throw "24MHz clock write";
+    });
+    // XXX: update clock to prevent overflow
+    // FIXME: should stop when the emulator is stopped
+    function update_clock() {
+        that.read[that.CLOCK_24MHZ]();
+        setTimeout(update_clock, 1000);
+    }
+    setTimeout(update_clock, 1000);
+}
+
+SystemRegisters.prototype = new Device();
+
+SystemRegisters.prototype.dump = function() {
+    display.log("CLOCK_24MHz=" + this.data["CLOCK_24MHZ"].time);
+};
+
+
+function UnimplementedDevice(baseaddr) {
+    this.baseaddr = baseaddr;
+};
+
+UnimplementedDevice.prototype = new Device();
+
 
 function GenericInterruptController(baseaddr) {
     this.baseaddr = baseaddr;
 
-    this.read = new Array();
-    this.write = new Array();
-    this.data = new Array();
     this.enabled = false;
     this.pending_interrupts = new Array();
     this.sent_irqs = new Array();
@@ -116,16 +158,13 @@ function GenericInterruptController(baseaddr) {
     this.ICER = this.baseaddr + 0x1180;
     this.ISER = this.baseaddr + 0x1100;
 
+    var that = this;
+
     /*
      * Distributor registers
      */
-    var that = this;
     // Distributor Control Register
-    this.data["DCR"] = 0;
-    this.read[this.DCR] = function() {
-        return that.data["DCR"];
-    };
-    this.write[this.DCR] = function(word) {
+    this.register_writable("DCR", 0, null, function(word) {
         if (bitops.get_bit(word, 0)) {
             that.enabled = true;
             display.log("GIC: started monitoring interrupts");
@@ -134,7 +173,7 @@ function GenericInterruptController(baseaddr) {
             display.log("GIC: stopped monitoring interrupts");
         }
         return that.data["DCR"] = word;
-    };
+    });
 
     // Interrupt Controller Type Register
     // [4:0]: ITLinesNumber
@@ -142,92 +181,46 @@ function GenericInterruptController(baseaddr) {
     var ictr = 0;
     ictr = bitops.set_bits(ictr, 7, 5, this.CPUNumber);
     ictr = bitops.set_bits(ictr, 4, 0, this.ITLinesNumber);
-    this.data["ICTR"] = ictr;
-    this.read[this.ICTR] = function() {
-        return that.data["ICTR"];
-    };
+    this.register_readonly("ICTR", ictr);
 
     var i;
     // Interrupt Configuration Registers
     for (i=0; i < 2*(this.ITLinesNumber+1); i++) {
         this["ICFR" + i] = this.ICFR + i*4;
-        this.data["ICFR" + i] = 0;
-        this.read[this["ICFR" + i]] = function() {
-            return that.data["ICFR" + i];
-        };
-        this.write[this["ICFR" + i]] = function(word) {
-            // TODO
-            that.data["ICFR" + i] = word;
-        };
+        this.register_writable("ICFR" + i, 0);
     }
     // Interrupt Processor Targets Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["IPTR" + i] = this.IPTR + i*4;
-        this.data["IPTR" + i] = 0;
-        this.read[this["IPTR" + i]] = function() {
-            return that.data["IPTR" + i];
-        };
-        this.write[this["IPTR" + i]] = function(word) {
-            // TODO
-            that.data["IPTR" + i] = word;
-        };
+        this.register_writable("IPTR" + i, 0);
     }
     // Interrupt Priority Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["IPR" + i] = this.IPR + i*4;
-        this.data["IPR" + i] = 0;
-        this.read[this["IPR" + i]] = function() {
-            return that.data["IPR" + i];
-        };
-        this.write[this["IPR" + i]] = function(word) {
-            // TODO
-            that.data["IPR" + i] = word;
-        };
+        this.register_writable("IPR" + i, 0);
     }
     // Interrupt Clear-Enable Registers
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ICER" + i] = this.ICER + i*4;
-        this.data["ICER" + i] = 0;
-        this.read[this["ICER" + i]] = function() {
-            return that.data["ICER" + i];
-        };
-        this.write[this["ICER" + i]] = function(word) {
-            // TODO
-            that.data["ICER" + i] = word;
-        };
+        this.register_writable("ICER" + i, 0);
     }
     // Interrupt Set-Enable Registers
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ISER" + i] = this.ISER + i*4;
-        this.data["ISER" + i] = 0;
-        this.read[this["ISER" + i]] = function() {
-            return that.data["ISER" + i];
-        };
-        this.write[this["ISER" + i]] = function(word) {
-            // TODO
-            that.data["ISER" + i] = word;
-        };
+        this.register_writable("ISER" + i, 0);
     }
 
     /*
      * CPU interface registers
      */
     // CPU Interface Control Register
-    this.data["CICR"] = 0;
-    this.write[this.CICR] = function(word) {
-        // TODO
-        that.data["CICR"] = word;
-    };
+    this.register_writable("CICR", 0);
 
     // Interrupt Priority Mask Register
-    this.data["IPMR"] = 0;
-    this.write[this.IPMR] = function(word) {
-        // TODO
-        that.data["IPMR"] = word;
-    };
+    this.register_writable("IPMR", 0);
 
     // Interrupt Acknowledge Register
-    this.read[this.IAR] = function() {
+    this.register_readonly("IAR", 0, function() {
         if (that.sent_irqs.length === 0) {
             // There is no pending IRQ
             return 1023;
@@ -235,10 +228,10 @@ function GenericInterruptController(baseaddr) {
         var irq = that.sent_irqs[0];
         //display.log("irq=" + irq);
         return irq;
-    };
+    });
 
     // End of Interrupt Register
-    this.write[this.EOIR] = function(word) {
+    this.register_writeonly("EOIR", function(word) {
         if (that.sent_irqs.length === 0)
             return;
         var eoi = word & 0x3ff;
@@ -246,8 +239,10 @@ function GenericInterruptController(baseaddr) {
             that.sent_irqs.shift();
         else
             throw "irq != eoi";
-    };
+    });
 }
+
+GenericInterruptController.prototype = new Device();
 
 GenericInterruptController.prototype.save = function() {
     var params = new Object();
@@ -357,10 +352,6 @@ function SP804(baseaddr, irq, gic) {
     this.irq = irq;
     this.gic = gic;
 
-    this.read = new Array();
-    this.write = new Array();
-    this.data = new Array();
-
     this.TIMCLK = 100000;  // 1 MHz clock pluse input
 
     this.Load1    = this.baseaddr + 0x00;
@@ -372,79 +363,53 @@ function SP804(baseaddr, irq, gic) {
     this.IntClr1  = this.baseaddr + 0x0c;
     this.IntClr2  = this.baseaddr + 0x2c;
 
-    this.read[this.baseaddr + 0xfe0] = 0;
-    this.read[this.baseaddr + 0xfe4] = 0;
-    this.read[this.baseaddr + 0xfe8] = 0;
-    this.read[this.baseaddr + 0xfec] = 0;
-    this.read[this.baseaddr + 0xff0] = 0;
-    this.read[this.baseaddr + 0xff4] = 0;
-    this.read[this.baseaddr + 0xff8] = 0;
-    this.read[this.baseaddr + 0xffc] = 0;
-
     var that = this;
+
     // Load Register, TimerXLoad
-    this.data["Load1"] = 0;
-    this.read[this.Load1] = function() {
-        return that.data["Load1"];
-    };
-    this.write[this.Load1] = function(word) {
+    this.register_writable("Load1", 0, null, function(word) {
         // TODO
         that.data["Load1"] = word;
         that.data["Value1"] = word;
-    };
+    });
 
-    this.data["Load2"] = 0;
-    this.read[this.Load2] = function() {
-        return that.data["Load2"];
-    };
-    this.write[this.Load2] = function(word) {
+    this.register_writable("Load2", 0, null, function(word) {
         // TODO
         that.data["Load2"] = word;
         that.data["Value2"] = word;
-    };
+    });
 
     // Current Value Register, TimerXValue
     // Read-only
-    this.data["Value1"] = 0xffffffff;
-    this.read[this.Value1] = function() {
-        return that.data["Value1"];
-    };
-    this.write[this.Value1] = function() {
+    this.register_writable("Value1", 0xffffffff, null, function(word) {
         // NOP
         // This is a Linux kernel bug??
-    };
+    });
 
-    this.data["Value2"] = 0xffffffff;
-    this.read[this.Value2] = function() {
-        return that.data["Value2"];
-    };
-    this.write[this.Value2] = function() {
+    this.register_writable("Value2", 0xffffffff, null, function(word) {
         // NOP
         // This is a Linux kernel bug??
-    };
+    });
 
     // Control Register, TimerXControl
     this.data["Control1"] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
-    this.write[this.Control1] = function(word) {
-        that.write_Control1(word);
-    };
+    this.register_writeonly("Control1", this.write_Control1.bind(this));
 
     this.data["Control2"] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
-    this.write[this.Control2] = function(word) {
-        that.write_Control2(word);
-    };
+    this.register_writeonly("Control2", this.write_Control2.bind(this));
 
     // Interrupt Clear Register. TimerXIntClr
-    this.write[this.IntClr1] = function(word) {
+    this.register_writeonly("IntClr1", function(word) {
         // TODO
         //display.log("IntClr1: " + word);
-    };
+    });
 
-    this.write[this.IntClr2] = function(word) {
+    this.register_writeonly("IntClr2", function(word) {
         // TODO
         //display.log("IntClr2: " + word);
-    };
+    });
 }
+
+SP804.prototype = new Device();
 
 SP804.prototype._write_Control1 = function(ctl) {
     this.data["Control1"] = ctl;
@@ -578,34 +543,20 @@ SP804.prototype.dump = function() {
 function SystemController(baseaddr) {
     this.baseaddr = baseaddr;
 
-    this.read = new Array();
-    this.data = new Array();
-
     this.CTRL0 = this.baseaddr + 0x0000;
     this.CTRL1 = this.baseaddr + 0xa000;
-
-    this.read[this.baseaddr + 0xfe0] = 0;
-    this.read[this.baseaddr + 0xfe4] = 0;
-    this.read[this.baseaddr + 0xfe8] = 0;
-    this.read[this.baseaddr + 0xfec] = 0;
-    this.read[this.baseaddr + 0xff0] = 0;
-    this.read[this.baseaddr + 0xff4] = 0;
-    this.read[this.baseaddr + 0xff8] = 0;
-    this.read[this.baseaddr + 0xffc] = 0;
 
     var ctrl0 = 0;
     ctrl0 = bitops.set_bit(ctrl0, 15, 1);
     ctrl0 = bitops.set_bit(ctrl0, 17, 1);
     ctrl0 = bitops.set_bit(ctrl0, 19, 1);
     ctrl0 = bitops.set_bit(ctrl0, 21, 1);
+    this.register_readonly("CTRL0", ctrl0);
 
-    var that = this;
-    this.data["CTRL0"] = ctrl0;
-    this.read[this.CTRL0] = function() {
-        return that.data["CTRL0"];
-    };
-    this.read[this.CTRL1] = 0;
+    this.register_readonly("CTRL1", 0);
 }
+
+SystemController.prototype = new Device();
 
 SystemController.prototype.save = function() {
     var params = new Object();
@@ -704,15 +655,12 @@ SystemIO.prototype.dump = function() {
  * UART
  */
 function UART(id, baseaddr, irq, gic) {
-    this.id = id;
-    this.name = "UART" + id;
     this.baseaddr = baseaddr;
     this.irq = irq;
     this.gic = gic;
 
-    this.read = new Array();
-    this.write = new Array();
-    this.data = new Array();
+    this.id = id;
+    this.name = "UART" + id;
     this.write_to_terminal = null;
 
     this.DR    = this.baseaddr + 0x00;
@@ -725,116 +673,6 @@ function UART(id, baseaddr, irq, gic) {
     this.IMSC  = this.baseaddr + 0x38;
     this.MIS   = this.baseaddr + 0x40;
     this.ICR   = this.baseaddr + 0x44;
-
-    var that = this;
-    this.write[this.DR] = function(onebyte) {
-        if (!(onebyte >=0 && onebyte <= 127))
-            throw "Invalid char: " + onebyte;
-        if (onebyte >=0 && onebyte < 32 && onebyte != 8 && onebyte != 10 && onebyte != 13)
-            display.log("Warning: not char: " + onebyte);
-        var str = String.fromCharCode(onebyte);
-        //display.log(str);
-        that.output_char(str);
-    };
-    this.read[this.DR] = function() {
-        //logger.log(that.name + ": read DR");
-        if (that.rx_fifo.length > 0)
-            return that.rx_fifo.shift();
-        else
-            return 0;
-    };
-
-    this.read[this.FR] = function() {
-        var ret = 0;
-        if (that.tx_fifo.length === 0)
-            ret += (1 << 7);
-        if (that.rx_fifo.length >= that.fifo_length)
-            ret += (1 << 6);
-        if (that.rx_fifo.length === 0)
-            ret += (1 << 4);
-        //logger.log("UART: read FR: " + ret.toString(16));
-        return ret;
-    };
-
-    this.data["CR"] = 0x300;
-    this.read[this.CR] = function() {
-        //logger.log(that.name + ": read CR");
-        return that.data["CR"];
-    };
-
-    this.write[this.CR] = function(halfword) {
-        //logger.log(that.name + ": write CR: " + halfword.toString(16));
-        var old = (that.data["CR"] & 1) ? true : false;
-        that.enabled = (halfword & 1) ? true : false;
-        that.data["CR"] = halfword;
-        if (!old && that.enabled) {
-            //logger.log(that.name + ": enabled");
-            that.enable();
-        }
-        //display.log("RX" + bitops.get_bit(halfword, 9));
-        //display.log("TX" + bitops.get_bit(halfword, 8));
-        if (halfword & 0x200)
-            that.rx_enabled = true;
-        else
-            that.rx_enabled = false;
-        if (halfword & 0x100)
-            that.tx_enabled = true;
-        else
-            that.tx_enabled = false;
-    };
-
-    this.write[this.IBRD] = function(halfword) {
-        //logger.log(that.name + ": write IBRD: " + halfword.toString(16));
-        that.data["IBRD"] = halfword;
-    };
-
-    this.write[this.FBRD] = function(onebyte) {
-        //logger.log(that.name + ": write FBRD: " + onebyte.toString(16));
-        that.data["FBRD"] = onebyte;
-    };
-
-    this.write[this.LCR_H] = function(onebyte) {
-        //logger.log(that.name + ": write LCR_H: " + onebyte.toString(16));
-        that.update_fifo_onoff(onebyte);
-        that.data["LCR_H"] = onebyte;
-    };
-
-    this.data["IFLS"] = 0;
-    this.write[this.IFLS] = function(halfword) {
-        //logger.log(that.name + ": write IFLS: " + halfword.toString(16));
-        that.update_fifo_level(halfword);
-        that.data["IFLS"] = halfword;
-    };
-
-    this.data["IMSC"] = 0;
-    this.read[this.IMSC] = function() {
-        //logger.log(that.name + ": read IMSC");
-        return that.data["IMSC"];
-    };
-    this.write[this.IMSC] = function(halfword) {
-        //logger.log(that.name + ": write IMSC: " + halfword.toString(16));
-        that.tx_int_enabled = (halfword & 0x20) ? true : false;
-        that.rx_int_enabled = (halfword & 0x10) ? true : false;
-        if (that.tx_int_enabled && that.tx_fifo.length === 0)
-            that.gic.send_interrupt(that.irq);
-        that.data["IMSC"] = halfword;
-    };
-
-    this.read[this.MIS] = function() {
-        var ret = 0;
-        if (!that.tx_fifo.length)
-            ret += (1 << 5);
-        if (that.rx_fifo.length)
-            ret += (1 << 4);
-        //logger.log(that.name + ": read MIS: " + ret);
-        return ret;
-    };
-
-    this.data["ICR"] = 0;
-    this.write[this.ICR] = function(halfword) {
-        //logger.log(that.name + ": write ICR: " + halfword.toString(16));
-        that.data["ICR"] = halfword;
-    };
 
     this.read[this.baseaddr + 0xfe0] = 0x11;
     this.read[this.baseaddr + 0xfe4] = 0x10;
@@ -859,7 +697,102 @@ function UART(id, baseaddr, irq, gic) {
     this.tx_enabled = false;
     this.rx_enabled = false;
     this.fifo_enabled = false;
+
+    var that = this;
+
+    this.register_writable("DR", 0, function() {
+        //logger.log(that.name + ": read DR");
+        if (that.rx_fifo.length > 0)
+            return that.rx_fifo.shift();
+        else
+            return 0;
+    }, function(onebyte) {
+        if (!(onebyte >=0 && onebyte <= 127))
+            throw "Invalid char: " + onebyte;
+        if (onebyte >=0 && onebyte < 32 && onebyte != 8 && onebyte != 10 && onebyte != 13)
+            display.log("Warning: not char: " + onebyte);
+        var str = String.fromCharCode(onebyte);
+        //display.log(str);
+        that.output_char(str);
+    });
+
+    this.register_readonly("FR", 0, function() {
+        var ret = 0;
+        if (that.tx_fifo.length === 0)
+            ret += (1 << 7);
+        if (that.rx_fifo.length >= that.fifo_length)
+            ret += (1 << 6);
+        if (that.rx_fifo.length === 0)
+            ret += (1 << 4);
+        //logger.log("UART: read FR: " + ret.toString(16));
+        return ret;
+    });
+
+    this.register_writable("CR", 0x300, function() {
+        //logger.log(that.name + ": read CR");
+        return that.data["CR"];
+    }, function(halfword) {
+        //logger.log(that.name + ": write CR: " + halfword.toString(16));
+        var old = (that.data["CR"] & 1) ? true : false;
+        that.enabled = (halfword & 1) ? true : false;
+        that.data["CR"] = halfword;
+        if (!old && that.enabled) {
+            //logger.log(that.name + ": enabled");
+            that.enable();
+        }
+        //display.log("RX" + bitops.get_bit(halfword, 9));
+        //display.log("TX" + bitops.get_bit(halfword, 8));
+        if (halfword & 0x200)
+            that.rx_enabled = true;
+        else
+            that.rx_enabled = false;
+        if (halfword & 0x100)
+            that.tx_enabled = true;
+        else
+            that.tx_enabled = false;
+    });
+
+    this.register_writable("IBRD", 0);  // TODO
+    this.register_writable("FBRD", 0);  // TODO
+
+    this.register_writable("LCR_H", 0, null, function(onebyte) {
+        //logger.log(that.name + ": write LCR_H: " + onebyte.toString(16));
+        that.update_fifo_onoff(onebyte);
+        that.data["LCR_H"] = onebyte;
+    });
+
+    this.register_writable("IFLS", 0, null, function(halfword) {
+        //logger.log(that.name + ": write IFLS: " + halfword.toString(16));
+        that.update_fifo_level(halfword);
+        that.data["IFLS"] = halfword;
+    });
+
+    this.register_writable("IMSC", 0, null, function(halfword) {
+        //logger.log(that.name + ": write IMSC: " + halfword.toString(16));
+        that.tx_int_enabled = (halfword & 0x20) ? true : false;
+        that.rx_int_enabled = (halfword & 0x10) ? true : false;
+        if (that.tx_int_enabled && that.tx_fifo.length === 0)
+            that.gic.send_interrupt(that.irq);
+        that.data["IMSC"] = halfword;
+    });
+
+    this.register_readonly("MIS", 0, function() {
+        var ret = 0;
+        if (!that.tx_fifo.length)
+            ret += (1 << 5);
+        if (that.rx_fifo.length)
+            ret += (1 << 4);
+        //logger.log(that.name + ": read MIS: " + ret);
+        return ret;
+    });
+
+    this.register_writeonly("ICR", function(halfword) {
+        //logger.log(that.name + ": write ICR: " + halfword.toString(16));
+        that.data["ICR"] = halfword;
+    });
 }
+
+UART.prototype = new Device();
 
 UART.prototype.enable = function() {
     if (this.write_to_terminal) {
