@@ -370,7 +370,7 @@ function SP804(baseaddr, irq, gic) {
     this.Load1 = this.baseaddr;
     this.data[this.Load1] = 0;
     this.read[this.Load1] = function() {
-        return that.data[that.oad1];
+        return that.data[that.Load1];
     };
     this.write[this.Load1] = function(word) {
         // TODO
