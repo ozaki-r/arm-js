@@ -40,7 +40,7 @@ function SystemRegisters(baseaddr, options) {
         return procid0;
     };
     // 24 MHz clock
-    this.data[this.CLOCK_24MHZ] = {
+    this.data["CLOCK_24MHZ"] = {
         clock: 0,
         time: (new Date()).getTime(),
         hz: 24*1000*1000
@@ -48,7 +48,7 @@ function SystemRegisters(baseaddr, options) {
     var that = this;
     this.read[this.CLOCK_24MHZ] = function() {
         var now = (new Date()).getTime();
-        var clock24mhz = that.data[that.CLOCK_24MHZ];
+        var clock24mhz = that.data["CLOCK_24MHZ"];
         var old = clock24mhz.time;
         clock24mhz.time = now;
         var passing_ticks = (now - old) * (clock24mhz.hz / 1000);
@@ -68,7 +68,7 @@ function SystemRegisters(baseaddr, options) {
 }
 
 SystemRegisters.prototype.dump = function() {
-    display.log("CLOCK_24MHz=" + this.data[this.CLOCK_24MHZ].time);
+    display.log("CLOCK_24MHz=" + this.data["CLOCK_24MHZ"].time);
 };
 
 function UnimplementedDevice(baseaddr) {
@@ -110,9 +110,9 @@ function GenericInterruptController(baseaddr) {
     var that = this;
     // Distributor Control Register
     this.DCR = this.baseaddr + 0x1000;
-    this.data[this.DCR] = 0;
+    this.data["DCR"] = 0;
     this.read[this.DCR] = function() {
-        return that.data[that.DCR];
+        return that.data["DCR"];
     };
     this.write[this.DCR] = function(word) {
         if (bitops.get_bit(word, 0)) {
@@ -122,79 +122,80 @@ function GenericInterruptController(baseaddr) {
             that.enabled = false;
             display.log("GIC: stopped monitoring interrupts");
         }
-        return that.data[that.DCR] = word;
+        return that.data["DCR"] = word;
     };
 
     // Interrupt Controller Type Register
     // [4:0]: ITLinesNumber
     // TODO
     this.ICTR = this.baseaddr + 0x1004;
-    this.data[this.ICTR] = 0;
-    this.data[this.ICTR] = bitops.set_bits(this.data[this.ICTR], 7, 5, this.CPUNumber);
-    this.data[this.ICTR] = bitops.set_bits(this.data[this.ICTR], 4, 0, this.ITLinesNumber);
+    var ictr = 0;
+    ictr = bitops.set_bits(ictr, 7, 5, this.CPUNumber);
+    ictr = bitops.set_bits(ictr, 4, 0, this.ITLinesNumber);
+    this.data["ICTR"] = ictr;
     this.read[this.ICTR] = function() {
-        return that.data[that.ICTR];
+        return that.data["ICTR"];
     };
 
     var i;
     // Interrupt Configuration Registers
     for (i=0; i < 2*(this.ITLinesNumber+1); i++) {
         this["ICFR" + i] = this.baseaddr + 0x1c00 + i*4;
-        this.data[this["ICFR" + i]] = 0;
+        this.data["ICFR" + i] = 0;
         this.read[this["ICFR" + i]] = function() {
-            return that.data[that["ICFR" + i]];
+            return that.data["ICFR" + i];
         };
         this.write[this["ICFR" + i]] = function(word) {
             // TODO
-            that.data[that["ICFR" + i]] = word;
+            that.data["ICFR" + i] = word;
         };
     }
     // Interrupt Processor Targets Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["IPTR" + i] = this.baseaddr + 0x1800 + i*4;
-        this.data[this["IPTR" + i]] = 0;
+        this.data["IPTR" + i] = 0;
         this.read[this["IPTR" + i]] = function() {
-            return that.data[that["IPTR" + i]];
+            return that.data["IPTR" + i];
         };
         this.write[this["IPTR" + i]] = function(word) {
             // TODO
-            that.data[that["IPTR" + i]] = word;
+            that.data["IPTR" + i] = word;
         };
     }
     // Interrupt Priority Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["IPR" + i] = this.baseaddr + 0x1400 + i*4;
-        this.data[this["IPR" + i]] = 0;
+        this.data["IPR" + i] = 0;
         this.read[this["IPR" + i]] = function() {
-            return that.data[that["IPR" + i]];
+            return that.data["IPR" + i];
         };
         this.write[this["IPR" + i]] = function(word) {
             // TODO
-            that.data[that["IPR" + i]] = word;
+            that.data["IPR" + i] = word;
         };
     }
     // Interrupt Clear-Enable Registers
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ICER" + i] = this.baseaddr + 0x1180 + i*4;
-        this.data[this["ICER" + i]] = 0;
+        this.data["ICER" + i] = 0;
         this.read[this["ICER" + i]] = function() {
-            return that.data[that["ICER" + i]];
+            return that.data["ICER" + i];
         };
         this.write[this["ICER" + i]] = function(word) {
             // TODO
-            that.data[that["ICER" + i]] = word;
+            that.data["ICER" + i] = word;
         };
     }
     // Interrupt Set-Enable Registers
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         this["ISER" + i] = this.baseaddr + 0x1100 + i*4;
-        this.data[this["ISER" + i]] = 0;
+        this.data["ISER" + i] = 0;
         this.read[this["ISER" + i]] = function() {
-            return that.data[that["ISER" + i]];
+            return that.data["ISER" + i];
         };
         this.write[this["ISER" + i]] = function(word) {
             // TODO
-            that.data[that["ISER" + i]] = word;
+            that.data["ISER" + i] = word;
         };
     }
 
@@ -203,18 +204,18 @@ function GenericInterruptController(baseaddr) {
      */
     // CPU Interface Control Register
     this.CICR = this.baseaddr + 0x100;
-    this.data[this.CICR] = 0;
+    this.data["CICR"] = 0;
     this.write[this.CICR] = function(word) {
         // TODO
-        that.data[that.CICR] = word;
+        that.data["CICR"] = word;
     };
 
     // Interrupt Priority Mask Register
     this.IPMR = this.baseaddr + 0x104;
-    this.data[this.IPMR] = 0;
+    this.data["IPMR"] = 0;
     this.write[this.IPMR] = function(word) {
         // TODO
-        that.data[that.IPMR] = word;
+        that.data["IPMR"] = word;
     };
 
     // Interrupt Acknowledge Register
@@ -256,7 +257,7 @@ GenericInterruptController.prototype.restore = function(params) {
     for (var i in this.data) {
         this.data[i] = params[i];
     }
-    if (bitops.get_bit(this.data[this.DCR], 0))
+    if (bitops.get_bit(this.data["DCR"], 0))
         this.enabled = true;
     else
         this.enabled = false;
@@ -290,14 +291,14 @@ GenericInterruptController.prototype.dump = function() {
     display.log("Enable=" + (this.enabled ? "enabled" : "disabled"));
     display.log("# of IRQs=" + this.n_supported_irqs + "(ITLinesNumber=" + this.ITLinesNumber + ")");
     display.log("# of CPUs=" + this.n_supported_cpus + "(CPUNumber=" + this.CPUNumber + ")");
-    display.log("DCR=" + toStringHex32(this.data[this.DCR]));
-    display.log("ICTR=" + toStringHex32(this.data[this.ICTR]));
+    display.log("DCR=" + toStringHex32(this.data["DCR"]));
+    display.log("ICTR=" + toStringHex32(this.data["ICTR"]));
 
     var header = "ICFR:\t";
     var msgs = new Array();
     for (i=0; i < 2*(this.ITLinesNumber+1); i++) {
         name = "ICFR" + i;
-        val = this.data[this[name]];
+        val = this.data[name];
         msgs.push(toStringHex32(val));
     }
     display.log(header + msgs.join(" "));
@@ -306,7 +307,7 @@ GenericInterruptController.prototype.dump = function() {
     msgs = new Array();
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         name = "IPTR" + i;
-        val = this.data[this[name]];
+        val = this.data[name];
         msgs.push(toStringHex32(val));
     }
     display.log(header + msgs.join(" "));
@@ -315,7 +316,7 @@ GenericInterruptController.prototype.dump = function() {
     msgs = new Array();
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         name = "IPR" + i;
-        val = this.data[this[name]];
+        val = this.data[name];
         msgs.push(toStringHex32(val));
     }
     display.log(header + msgs.join(" "));
@@ -324,7 +325,7 @@ GenericInterruptController.prototype.dump = function() {
     msgs = new Array();
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         name = "ICER" + i;
-        val = this.data[this[name]];
+        val = this.data[name];
         msgs.push(toStringHex32(val));
     }
     display.log(header + msgs.join(" "));
@@ -333,13 +334,13 @@ GenericInterruptController.prototype.dump = function() {
     msgs = new Array();
     for (i=0; i < (this.ITLinesNumber+1); i++) {
         name = "ISER" + i;
-        val = this.data[this[name]];
+        val = this.data[name];
         msgs.push(toStringHex32(val));
     }
     display.log(header + msgs.join(" "));
 
-    display.log("CICR=" + toStringHex32(this.data[this.CICR]));
-    display.log("IPMR=" + toStringHex32(this.data[this.IPMR]));
+    display.log("CICR=" + toStringHex32(this.data["CICR"]));
+    display.log("IPMR=" + toStringHex32(this.data["IPMR"]));
 };
 
 /*
@@ -368,33 +369,33 @@ function SP804(baseaddr, irq, gic) {
     var that = this;
     // Load Register, TimerXLoad
     this.Load1 = this.baseaddr;
-    this.data[this.Load1] = 0;
+    this.data["Load1"] = 0;
     this.read[this.Load1] = function() {
-        return that.data[that.Load1];
+        return that.data["Load1"];
     };
     this.write[this.Load1] = function(word) {
         // TODO
-        that.data[that.Load1] = word;
-        that.data[that.Value1] = word;
+        that.data["Load1"] = word;
+        that.data["Value1"] = word;
     };
 
     this.Load2 = this.baseaddr + 0x20;
-    this.data[this.Load2] = 0;
+    this.data["Load2"] = 0;
     this.read[this.Load2] = function() {
-        return that.data[that.Load2];
+        return that.data["Load2"];
     };
     this.write[this.Load2] = function(word) {
         // TODO
-        that.data[that.Load2] = word;
-        that.data[that.Value2] = word;
+        that.data["Load2"] = word;
+        that.data["Value2"] = word;
     };
 
     // Current Value Register, TimerXValue
     // Read-only
     this.Value1 = this.baseaddr + 0x04;
-    this.data[this.Value1] = 0xffffffff;
+    this.data["Value1"] = 0xffffffff;
     this.read[this.Value1] = function() {
-        return that.data[that.Value1];
+        return that.data["Value1"];
     };
     this.write[this.Value1] = function() {
         // NOP
@@ -402,9 +403,9 @@ function SP804(baseaddr, irq, gic) {
     };
 
     this.Value2 = this.baseaddr + 0x24;
-    this.data[this.Value2] = 0xffffffff;
+    this.data["Value2"] = 0xffffffff;
     this.read[this.Value2] = function() {
-        return that.data[that.Value2];
+        return that.data["Value2"];
     };
     this.write[this.Value2] = function() {
         // NOP
@@ -413,13 +414,13 @@ function SP804(baseaddr, irq, gic) {
 
     // Control Register, TimerXControl
     this.Control1 = this.baseaddr + 0x08;
-    this.data[this.Control1] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
+    this.data["Control1"] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
     this.write[this.Control1] = function(word) {
         that.write_Control1(word);
     };
 
     this.Control2 = this.baseaddr + 0x28;
-    this.data[this.Control2] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
+    this.data["Control2"] = {En:0, Mode:0, IntEnable:1, Pre:0, Size:0, OneShot:0, value:0};
     this.write[this.Control2] = function(word) {
         that.write_Control2(word);
     };
@@ -439,11 +440,11 @@ function SP804(baseaddr, irq, gic) {
 }
 
 SP804.prototype._write_Control1 = function(ctl) {
-    this.data[this.Control1] = ctl;
+    this.data["Control1"] = ctl;
     if (ctl.En) {
         // Clear old timer
         clearTimeout(this.timeout_timer1.bind(this));
-        var val = this.data[this.Value1];
+        var val = this.data["Value1"];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     } else {
@@ -456,11 +457,11 @@ SP804.prototype.write_Control1 = function(word) {
 };
 
 SP804.prototype._write_Control2 = function(ctl) {
-    this.data[this.Control2] = ctl;
+    this.data["Control2"] = ctl;
     if (ctl.En) {
         // Clear old timer
         clearTimeout(this.timeout_timer2.bind(this));
-        var val = this.data[this.Value2];
+        var val = this.data["Value2"];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     } else {
@@ -484,32 +485,32 @@ SP804.prototype.restore = function(params) {
     for (var i in this.data) {
         this.data[i] = params[i];
     }
-    this._write_Control1(params[this.Control1]);
-    this._write_Control2(params[this.Control2]);
+    this._write_Control1(this.data["Control1"]);
+    this._write_Control2(this.data["Control2"]);
 };
 
 SP804.prototype.timeout_timer1 = function() {
     //display.log("timer1 timeout");
-    if (this.data[this.Control1].IntEnable)
+    if (this.data["Control1"].IntEnable)
         this.gic.send_interrupt(this.irq);
-    if (!this.data[this.Control1].OneShot) {
-        var val = this.data[this.Value1];
+    if (!this.data["Control1"].OneShot) {
+        var val = this.data["Value1"];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer1.bind(this), val * 1000 / this.TIMCLK);
     }
     // XXX: Linux uses timer1 as timer interrupt generator and timer2 as counter.
     // So we can update timer2 value on only timer1 interrupt.
-    this.data[this.Value2] -= this.data[this.Value1];
-    if (this.data[this.Value2] < 0)
-        this.data[this.Value2] = 0xffffffff + this.data[this.Value2];
+    this.data["Value2"] -= this.data["Value1"];
+    if (this.data["Value2"] < 0)
+        this.data["Value2"] = 0xffffffff + this.data["Value2"];
 };
 
 SP804.prototype.timeout_timer2 = function() {
     //display.log("timer2 timeout");
-    if (this.data[this.Control2].IntEnable)
+    if (this.data["Control2"].IntEnable)
         this.gic.send_interrupt(this.irq);
-    if (!this.data[this.Control2].OneShot) {
-        var val = this.data[this.Value1];
+    if (!this.data["Control2"].OneShot) {
+        var val = this.data["Value1"];
         if (val != 0xffffffff)
             setTimeout(this.timeout_timer2.bind(this), val * 1000 / this.TIMCLK);
     }
@@ -528,11 +529,11 @@ SP804.prototype.parse_control_register = function(value) {
 };
 
 SP804.prototype.dump_timer = function(id) {
-    var ctl = this.data[this["Control" + id]];
+    var ctl = this.data["Control" + id];
     var header = "" + id + ": ";
     var msgs = new Array();
-    msgs.push("value=" + toStringHex32(this.data[this["Value" + id]]));
-    msgs.push("load=" + toStringHex32(this.data[this["Load" + id]]));
+    msgs.push("value=" + toStringHex32(this.data["Value" + id]));
+    msgs.push("load=" + toStringHex32(this.data["Load" + id]));
     msgs.push("En=" + (ctl.En ? "enabled" : "disabled"));
     msgs.push("Mode=" + (ctl.Mode ? "periodic" : "free-running"));
     msgs.push("IntEnable=" + (ctl.IntEnable ? "enabled" : "disabled"));
@@ -592,9 +593,9 @@ function SystemController(baseaddr) {
     ctrl0 = bitops.set_bit(ctrl0, 21, 1);
 
     var that = this;
-    this.data[this.CTRL0] = ctrl0;
+    this.data["CTRL0"] = ctrl0;
     this.read[this.CTRL0] = function() {
-        return that.data[that.CTRL0];
+        return that.data["CTRL0"];
     };
     this.read[this.CTRL1] = 0;
 }
@@ -681,7 +682,7 @@ SystemIO.prototype.st_word = function(addr, word) {
 
 SystemIO.prototype.dump = function() {
     // FIXME
-    //display.log("24MHz clock=" + this.sysregs.data[this.sysregs.CLOCK_24MHZ].clock.toString());
+    //display.log("24MHz clock=" + this.sysregs.data["CLOCK_24MHZ"].clock.toString());
     var addr;
     display.log("Read:");
     for (addr in this.read) {
@@ -748,17 +749,17 @@ function UART(id, baseaddr, irq, gic) {
         return ret;
     };
 
-    this.data[this.CR] = 0x300;
+    this.data["CR"] = 0x300;
     this.read[this.CR] = function() {
         //logger.log(that.name + ": read CR");
-        return that.data[that.CR];
+        return that.data["CR"];
     };
 
     this.write[this.CR] = function(halfword) {
         //logger.log(that.name + ": write CR: " + halfword.toString(16));
-        var old = (that.data[that.CR] & 1) ? true : false;
+        var old = (that.data["CR"] & 1) ? true : false;
         that.enabled = (halfword & 1) ? true : false;
-        that.data[that.CR] = halfword;
+        that.data["CR"] = halfword;
         if (!old && that.enabled) {
             //logger.log(that.name + ": enabled");
             that.enable();
@@ -777,31 +778,31 @@ function UART(id, baseaddr, irq, gic) {
 
     this.write[this.IBRD] = function(halfword) {
         //logger.log(that.name + ": write IBRD: " + halfword.toString(16));
-        that.data[that.IBRD] = halfword;
+        that.data["IBRD"] = halfword;
     };
 
     this.write[this.FBRD] = function(onebyte) {
         //logger.log(that.name + ": write FBRD: " + onebyte.toString(16));
-        that.data[that.FBRD] = onebyte;
+        that.data["FBRD"] = onebyte;
     };
 
     this.write[this.LCR_H] = function(onebyte) {
         //logger.log(that.name + ": write LCR_H: " + onebyte.toString(16));
         that.update_fifo_onoff(onebyte);
-        that.data[that.LCR_H] = onebyte;
+        that.data["LCR_H"] = onebyte;
     };
 
-    this.data[this.IFLS] = 0;
+    this.data["IFLS"] = 0;
     this.write[this.IFLS] = function(halfword) {
         //logger.log(that.name + ": write IFLS: " + halfword.toString(16));
         that.update_fifo_level(halfword);
-        that.data[that.IFLS] = halfword;
+        that.data["IFLS"] = halfword;
     };
 
-    this.data[this.IMSC] = 0;
+    this.data["IMSC"] = 0;
     this.read[this.IMSC] = function() {
         //logger.log(that.name + ": read IMSC");
-        return that.data[that.IMSC];
+        return that.data["IMSC"];
     };
     this.write[this.IMSC] = function(halfword) {
         //logger.log(that.name + ": write IMSC: " + halfword.toString(16));
@@ -809,7 +810,7 @@ function UART(id, baseaddr, irq, gic) {
         that.rx_int_enabled = (halfword & 0x10) ? true : false;
         if (that.tx_int_enabled && that.tx_fifo.length === 0)
             that.gic.send_interrupt(that.irq);
-        that.data[that.IMSC] = halfword;
+        that.data["IMSC"] = halfword;
     };
 
     this.read[this.MIS] = function() {
@@ -822,10 +823,10 @@ function UART(id, baseaddr, irq, gic) {
         return ret;
     };
 
-    this.data[this.ICR] = 0;
+    this.data["ICR"] = 0;
     this.write[this.ICR] = function(halfword) {
         //logger.log(that.name + ": write ICR: " + halfword.toString(16));
-        that.data[that.ICR] = halfword;
+        that.data["ICR"] = halfword;
     };
 
     this.read[this.baseaddr + 0xfe0] = 0x11;
@@ -952,11 +953,11 @@ UART.prototype.restore = function(params) {
     for (var i in this.data) {
         this.data[i] = params[i];
     }
-    this.update_fifo_onoff(this.data[this.LCR_H]);
-    this.enabled = (bitops.get_bit(this.data[this.CR], 0) ? true : false);
-    this.update_fifo_level(this.data[this.IFLS]);
-    this.tx_int_enabled = (bitops.get_bit(this.data[this.IMSC], 5) ? true : false);
-    this.rx_int_enabled = (bitops.get_bit(this.data[this.IMSC], 4) ? true : false);
+    this.update_fifo_onoff(this.data["LCR_H"]);
+    this.enabled = (bitops.get_bit(this.data["CR"], 0) ? true : false);
+    this.update_fifo_level(this.data["IFLS"]);
+    this.tx_int_enabled = (bitops.get_bit(this.data["IMSC"], 5) ? true : false);
+    this.rx_int_enabled = (bitops.get_bit(this.data["IMSC"], 4) ? true : false);
 };
 
 UART.prototype.dump = function() {
