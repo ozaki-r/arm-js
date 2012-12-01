@@ -60,6 +60,20 @@ Device.prototype.register_writable = function(name, initval, cb_r, cb_w) {
     }
 };
 
+Device.prototype.save = function() {
+    var params = new Object();
+    for (var i in this.data) {
+        params[i] = this.data[i];
+    }
+    return params;
+};
+
+Device.prototype.restore = function(params) {
+    for (var i in this.data) {
+        this.data[i] = params[i];
+    }
+};
+
 /*
  * System Registers
  */
@@ -245,19 +259,14 @@ function GenericInterruptController(baseaddr) {
 GenericInterruptController.prototype = new Device();
 
 GenericInterruptController.prototype.save = function() {
-    var params = new Object();
-    for (var i in this.data) {
-        params[i] = this.data[i];
-    }
+    params = Device.prototype.save.call(this);
     params.pending_interrupts = this.pending_interrupts;
     params.sent_irqs = this.sent_irqs;
     return params;
 };
 
 GenericInterruptController.prototype.restore = function(params) {
-    for (var i in this.data) {
-        this.data[i] = params[i];
-    }
+    Device.prototype.restore.call(this, params);
     if (bitops.get_bit(this.data["DCR"], 0))
         this.enabled = true;
     else
@@ -445,18 +454,8 @@ SP804.prototype.write_Control2 = function(word) {
     this._write_Control2(this.parse_control_register(word));
 };
 
-SP804.prototype.save = function() {
-    var params = new Object();
-    for (var i in this.data) {
-        params[i] = this.data[i];
-    }
-    return params;
-};
-
 SP804.prototype.restore = function(params) {
-    for (var i in this.data) {
-        this.data[i] = params[i];
-    }
+    Device.prototype.restore.call(this, params);
     this._write_Control1(this.data["Control1"]);
     this._write_Control2(this.data["Control2"]);
 };
@@ -557,20 +556,6 @@ function SystemController(baseaddr) {
 }
 
 SystemController.prototype = new Device();
-
-SystemController.prototype.save = function() {
-    var params = new Object();
-    for (var i in this.data) {
-        params[i] = this.data[i];
-    }
-    return params;
-};
-
-SystemController.prototype.restore = function(params) {
-    for (var i in this.data) {
-        this.data[i] = params[i];
-    }
-};
 
 /*
  * I/O
@@ -879,20 +864,14 @@ UART.prototype.update_fifo_level = function(halfword) {
 };
 
 UART.prototype.save = function() {
-    var params = new Object();
-    for (var i in this.data) {
-        params[i] = this.data[i];
-    }
-    return params;
+    return Device.prototype.save.call(this);
     // FIXME
     //params.tx_fifo = this.tx_fifo;
     //params.rx_fifo = this.rx_fifo;
 };
 
 UART.prototype.restore = function(params) {
-    for (var i in this.data) {
-        this.data[i] = params[i];
-    }
+    Device.prototype.restore.call(this, params);
     this.update_fifo_onoff(this.data["LCR_H"]);
     this.enabled = (bitops.get_bit(this.data["CR"], 0) ? true : false);
     this.update_fifo_level(this.data["IFLS"]);
