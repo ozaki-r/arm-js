@@ -99,16 +99,16 @@ function ARMv7_CP15(options, cpu) {
     id_mmfr1 = bitops.set_bits(id_mmfr1, 3, 0, 0); // L1 Harvard cache VA
     
     var id_mmfr0 = 0;
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 31, 28, 0); // Reserved, Read-As-Zero
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 37, 24, 0); // FCSE support
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 23, 20, 0); // Auxiliary registers
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 31, 28, 0); // Reserved, Read-As-Zero
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 37, 24, 0); // FCSE support
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 23, 20, 0); // Auxiliary registers
     // ARMv7 requires this setting.
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 19, 16, 1); // TCM support
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 15, 12, 0); // Outer Shareable
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 11, 8, 0); // Cache coherence
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 7, 4, 0); // PMSA support
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 19, 16, 1); // TCM support
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 15, 12, 0); // Outer Shareable
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 11, 8, 0); // Cache coherence
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 7, 4, 0); // PMSA support
     // VMSAv7 supported, with support for remapping and the access flag. ARMv7-A profile.
-    id_mmfr0 = bitops.set_bits(id_mmfr1, 3, 0, 3); // VMSA support
+    id_mmfr0 = bitops.set_bits(id_mmfr0, 3, 0, 3); // VMSA support
     
     // c0, Cache Size ID Registers (CCSIDR)
     /*
