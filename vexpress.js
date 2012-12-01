@@ -356,7 +356,7 @@ GenericInterruptController.prototype.dump = function() {
 /*
  * ARM Dual-Timer Module (SP804)
  */
-function SP804(baseaddr, irq, gic) {
+function DualTimer(baseaddr, irq, gic) {
     this.baseaddr = baseaddr;
     this.irq = irq;
     this.gic = gic;
@@ -418,9 +418,9 @@ function SP804(baseaddr, irq, gic) {
     });
 }
 
-SP804.prototype = new Device();
+DualTimer.prototype = new Device();
 
-SP804.prototype._write_Control1 = function(ctl) {
+DualTimer.prototype._write_Control1 = function(ctl) {
     this.data["Control1"] = ctl;
     if (ctl.En) {
         // Clear old timer
@@ -433,11 +433,11 @@ SP804.prototype._write_Control1 = function(ctl) {
     }
 };
 
-SP804.prototype.write_Control1 = function(word) {
+DualTimer.prototype.write_Control1 = function(word) {
     this._write_Control1(this.parse_control_register(word));
 };
 
-SP804.prototype._write_Control2 = function(ctl) {
+DualTimer.prototype._write_Control2 = function(ctl) {
     this.data["Control2"] = ctl;
     if (ctl.En) {
         // Clear old timer
@@ -450,17 +450,17 @@ SP804.prototype._write_Control2 = function(ctl) {
     }
 };
 
-SP804.prototype.write_Control2 = function(word) {
+DualTimer.prototype.write_Control2 = function(word) {
     this._write_Control2(this.parse_control_register(word));
 };
 
-SP804.prototype.restore = function(params) {
+DualTimer.prototype.restore = function(params) {
     Device.prototype.restore.call(this, params);
     this._write_Control1(this.data["Control1"]);
     this._write_Control2(this.data["Control2"]);
 };
 
-SP804.prototype.timeout_timer1 = function() {
+DualTimer.prototype.timeout_timer1 = function() {
     //display.log("timer1 timeout");
     if (this.data["Control1"].IntEnable)
         this.gic.send_interrupt(this.irq);
@@ -476,7 +476,7 @@ SP804.prototype.timeout_timer1 = function() {
         this.data["Value2"] = 0xffffffff + this.data["Value2"];
 };
 
-SP804.prototype.timeout_timer2 = function() {
+DualTimer.prototype.timeout_timer2 = function() {
     //display.log("timer2 timeout");
     if (this.data["Control2"].IntEnable)
         this.gic.send_interrupt(this.irq);
@@ -487,7 +487,7 @@ SP804.prototype.timeout_timer2 = function() {
     }
 };
 
-SP804.prototype.parse_control_register = function(value) {
+DualTimer.prototype.parse_control_register = function(value) {
     var ctl = {En:0, Mode:0, IntEnable:0, Pre:0, Size:0, OneShot:0, value:0};
     ctl.En = bitops.get_bit(value, 7);
     ctl.Mode = bitops.get_bit(value, 6);
@@ -499,7 +499,7 @@ SP804.prototype.parse_control_register = function(value) {
     return ctl;
 };
 
-SP804.prototype.dump_timer = function(id) {
+DualTimer.prototype.dump_timer = function(id) {
     var ctl = this.data["Control" + id];
     var header = "" + id + ": ";
     var msgs = new Array();
@@ -531,7 +531,7 @@ SP804.prototype.dump_timer = function(id) {
     display.log(header + msgs.join(', '));
 };
 
-SP804.prototype.dump = function() {
+DualTimer.prototype.dump = function() {
     this.dump_timer(1);
     this.dump_timer(2);
 };
@@ -1452,10 +1452,10 @@ function VersatileExpress(configs, options) {
     this.io.register_io("GIC", this.gic);
     this.uart0 = new UART(0, 0x10009000, this.irq_base + 5, this.gic);
     this.io.register_io("UART0", this.uart0);
-    this.timer0 = new SP804(0x10011000, this.irq_base + 2, this.gic);
-    this.timer1 = new SP804(0x10012000, this.irq_base + 2, this.gic);
-    this.io.register_io("SP804#0", this.timer0);
-    this.io.register_io("SP804#1", this.timer1);
+    this.timer0 = new DualTimer(0x10011000, this.irq_base + 2, this.gic);
+    this.timer1 = new DualTimer(0x10012000, this.irq_base + 2, this.gic);
+    this.io.register_io("DualTimer#0", this.timer0);
+    this.io.register_io("DualTimer#1", this.timer1);
     this.sysctrl = new SystemController(0x10001000);
     this.io.register_io("SystemController", this.sysctrl);
 
