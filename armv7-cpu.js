@@ -4,9 +4,8 @@
  * Copyright 2012, Ryota Ozaki
  * Dual licensed under the MIT or GPL Version 2 licenses.
  */
-function ARMv7_CPU(options, system, memctlr) {
+function ARMv7_CPU(options, memctlr) {
     this.options = options;
-    this.system = system;
     this.memctlr = memctlr;
 
     this.USR_MODE = 0x10;
