@@ -23,9 +23,6 @@ Tested Browsers
 Get Started
 ===========
 
-1. Prepare term.js
-  1. Install [js-beautify](https://github.com/einars/js-beautify)
-  2. Run prepare_termjs.sh
-2. Execute ruby misc/simple-http-server.rb on terminal
-3. Access http://localhost:8080/arm-js.html
-4. Push Boot button at the top-left corner to start the emulator
+1. Execute ruby misc/simple-http-server.rb on terminal
+2. Access http://localhost:8080/arm-js.html
+3. Push Boot button at the top-left corner to start the emulator
