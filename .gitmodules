@@ -1,0 +1,3 @@
+[submodule "js/simpleterm"]
+	path = js/simpleterm
+	url = https://github.com/michaelko/simpleterm.git
