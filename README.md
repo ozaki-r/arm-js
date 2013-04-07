@@ -17,9 +17,8 @@ Emulator Features
 Tested Browsers
 ===============
 
-* Chrome 23 (recommended)
-* Firefox 16
-* Safari 6
+* Chrome 27 beta (recommended)
+* Firefox 20
 
 Get Started
 ===========
@@ -27,11 +26,6 @@ Get Started
 1. Prepare term.js
   1. Install [js-beautify](https://github.com/einars/js-beautify)
   2. Run prepare_termjs.sh
-2. Deploy files either on local filesystem or on HTTP server
-3. Access arm-js.html
+2. Execute ruby misc/simple-http-server.rb on terminal
+3. Access http://localhost:8080/arm-js.html
 4. Push Boot button at the top-left corner to start the emulator
-
-Note that for Chrome you need to add --allow-file-access-from-files
-option to run arm-js from local filesystem. For example, for Mac OS X,
-execute 'open -a "Google Chrome" --args --allow-file-access-from-files'
-on a terminal.
