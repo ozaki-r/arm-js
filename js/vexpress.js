@@ -179,6 +179,7 @@ function GenericInterruptController(baseaddr) {
     this.IPMR = this.baseaddr + 0x0104;
     this.IAR  = this.baseaddr + 0x010c;
     this.EOIR = this.baseaddr + 0x0110;
+    this.ICDIPTR = this.baseaddr + 0x0800;
     this.ICFR = this.baseaddr + 0x1c00;
     this.IPTR = this.baseaddr + 0x1800;
     this.IPR  = this.baseaddr + 0x1400;
@@ -219,7 +220,7 @@ function GenericInterruptController(baseaddr) {
     // Interrupt Processor Targets Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
         this["IPTR" + i] = this.IPTR + i*4;
-        this.register_writable("IPTR" + i, 0);
+        this.register_writable("IPTR" + i, 0x01010101);
     }
     // Interrupt Priority Registers
     for (i=0; i < 8*(this.ITLinesNumber+1); i++) {
@@ -244,7 +245,12 @@ function GenericInterruptController(baseaddr) {
     this.register_writable("CICR", 0);
 
     // Interrupt Priority Mask Register
-    this.register_writable("IPMR", 0);
+    this.register_writable("IPMR", 0, function() {
+            return that.data["IPMR"];
+        },
+        function(word) {
+            that.data["IPMR"] = word;
+        });
 
     // Interrupt Acknowledge Register
     this.register_readonly("IAR", 0, function() {
@@ -266,6 +272,14 @@ function GenericInterruptController(baseaddr) {
             that.sent_irqs.shift();
         else
             throw "irq != eoi";
+    });
+
+    // Interrupt Configuration Registers
+    this.register_writable("ICDIPTR", 0x01010101,
+        function() {
+            return 0x01010101;
+        }, function(word) {
+            that.data["ICDIPTR"] = word;
     });
 }
 
