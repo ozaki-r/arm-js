@@ -3201,6 +3201,18 @@ ARMv7_CPU.prototype.uxtab = function(inst, addr) {
     this.print_inst_uxtab(addr, inst, "uxtab", d, n, m, rotation);
 };
 
+ARMv7_CPU.prototype.uxtah = function(inst, addr) {
+    this.print_inst("UXTAH", inst, addr);
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var m = inst & 0xf;
+    var rotation = ((inst >>> 10) & 3) << 3;
+
+    var rotated = this.ror(this.reg(m), rotation);
+    this.regs[d] = this.reg(n) + bitops.get_bits64(rotated, 15, 0);
+    this.print_inst_uxtab(addr, inst, "uxtah", d, null, m, rotation);
+};
+
 ARMv7_CPU.prototype.uxtb = function(inst, addr) {
     this.print_inst("UXTB", inst, addr);
     var d = (inst >>> 12) & 0xf;
@@ -5521,7 +5533,7 @@ ARMv7_CPU.prototype.decode_media = function(inst, addr) {
                                                 return "uxth";
                                         } else {
                                                 // UXTAH
-                                                this.abort_not_impl("UXTAH", inst, addr);
+                                                return "uxtah";
                                         }
                                         break;
                                     case 5:
