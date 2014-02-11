@@ -2985,22 +2985,21 @@ ARMv7_CPU.prototype.swp = function(inst,addr){
     var Rm = inst & 0xF;
 		
     var valn = this.reg(Rn);
-    var vald = this.reg(Rd);
     var valm = this.reg(Rm);
 		
-    address = valm;
+    address = valn;
 		
     if(B){
-        var data = this.ld_byte(valn);
+        var data = this.ld_byte(address);
         this.st_byte(address, bitops.get_bits(valm, 7, 0));
         this.regs[Rd] = data;
     } else {
-        var data = this.ld_word(valn);
+        var data = this.ld_word(address);
         this.st_word(address, valm);
         this.regs[Rd] = data;
     }
     this.print_inst_reg(addr, inst, "swp"+B?"B":"", null, Rn, Rd, Rm, null, null, false, false); 	
-}
+};
 
 ARMv7_CPU.prototype.strex = function(inst, addr) {
     this.print_inst("STREX", inst, addr);
