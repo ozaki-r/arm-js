@@ -2992,6 +2992,22 @@ ARMv7_CPU.prototype.strex = function(inst, addr) {
     this.print_inst_reg(addr, inst, "strex", null, t, n, d, null, null, true, false);
 };
 
+ARMv7_CPU.prototype.strexd = function(inst, addr) {
+    this.print_inst("STREXD", inst, addr);
+    var n = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var t = inst & 0xf;
+    var t2 = t + 1;
+
+    var address = this.reg(n);
+    // ExclusiveMonitorsPass(address,8)
+    this.st_word(address, this.reg(t));
+    this.st_word(address + 4, this.reg(t2));
+    this.regs[d] = 0;
+    // FIXME
+    this.print_inst_reg(addr, inst, "strexd", null, t, n, d, null, null, true, false);
+};
+
 ARMv7_CPU.prototype.sub_reg = function(inst, addr) {
     this.print_inst("SUB (register)", inst, addr);
     var s = inst & 0x00100000;
@@ -4344,7 +4360,7 @@ ARMv7_CPU.prototype.decode_sync_prim = function(inst, addr) {
                 break;
             case 2:
                 // STREXD
-                this.abort_not_impl("STREXD", inst, addr);
+                return "strexd";
                 break;
             case 3:
                 // LDREXD
