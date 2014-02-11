@@ -2497,6 +2497,22 @@ ARMv7_CPU.prototype.ldrex = function(inst, addr) {
     this.print_inst_reg(addr, inst, "ldrex", null, t, n, null, null, null, true, false);
 };
 
+ARMv7_CPU.prototype.ldrexd = function(inst, addr) {
+    this.print_inst("LDREXD", inst, addr);
+    var n = bitops.get_bits(inst, 19, 16);
+    var t = bitops.get_bits(inst, 15, 12);
+    var t2 = t + 1;
+
+    var address = this.reg(n);
+    // SetExclusiveMonitors(address,8);
+    // value = MemA[address,8];
+    // R[t] = value<31:0>
+    // R[t2] = value<63:31>
+    this.regs[t] = this.ld_word(address);
+    this.regs[t2] = this.ld_word(address + 4);
+    this.print_inst_reg(addr, inst, "ldrexd", null, t, n, null, null, null, true, false);
+};
+
 ARMv7_CPU.prototype.ldrt_a1 = function(inst, addr) {
     this.print_inst("LDRT A1", inst, addr);
     var u = (inst >>> 23) & 1;
@@ -4332,7 +4348,7 @@ ARMv7_CPU.prototype.decode_sync_prim = function(inst, addr) {
                 break;
             case 3:
                 // LDREXD
-                this.abort_not_impl("LDREXD", inst, addr);
+                return "ldrexd";
                 break;
             case 4:
                 // STREXB
