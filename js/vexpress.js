@@ -86,6 +86,9 @@ function SystemRegisters(baseaddr, options) {
     this.CLOCK_24MHZ = this.baseaddr + 0x5c;
     this.MISC        = this.baseaddr + 0x60;
     this.PROCID0     = this.baseaddr + 0x84;
+    this.CFGDATA     = this.baseaddr + 0xa0;
+    this.CFGCTRL     = this.baseaddr + 0xa4;
+    this.CFGSTAT     = this.baseaddr + 0xa8;
 
     var that = this;
 
@@ -131,12 +134,22 @@ function SystemRegisters(baseaddr, options) {
         setTimeout(update_clock, 1000);
     }
     setTimeout(update_clock, 1000);
+
+    this.register_writable("CFGDATA", 0);
+    this.register_writable("CFGCTRL", 0, null, function(word) {
+        that.data["CFGCTRL"] = bitops.clear_bit(word, 31);  // not busy
+        that.data["CFGSTAT"] = 1;  // set complete
+    });
+    this.register_writable("CFGSTAT", 0);
 }
 
 SystemRegisters.prototype = new Device();
 
 SystemRegisters.prototype.dump = function() {
     display.log("CLOCK_24MHz=" + this.data["CLOCK_24MHZ"].time);
+    display.log("CFGDATA=" + this.data["CFGDATA"].toString(16));
+    display.log("CFGCTRL=" + this.data["CFGCTRL"].toString(16));
+    display.log("CFGSTAT=" + this.data["CFGSTAT"].toString(16));
 };
 
 
