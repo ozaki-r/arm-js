@@ -11,13 +11,13 @@
 
 / {
 	model = "ARM-JS";
-	/* arm,hbi = <0x191>; */
 	compatible = "arm,vexpress";
 	interrupt-parent = <&gic>;
 	#address-cells = <1>;
 	#size-cells = <1>;
 
 	chosen {
+		//bootargs = "rw root=/dev/ram0 console=ttyAMA0 earlyprintk initrd=0x00800000,135433 debug ignore_loglevel";
 		bootargs = "rw root=/dev/ram0 console=ttyAMA0 earlyprintk initrd=0x00800000,135433";
 	};
 
@@ -111,26 +111,51 @@
 			#size-cells = <1>;
 			ranges = <0 7 0 0x20000>;
 
-			sysreg@00000 {
+			v2m_sysreg: sysreg@00000 {
 				compatible = "arm,vexpress-sysreg";
 				reg = <0x00000 0x1000>;
 			};
 
-			sysctl@01000 {
+			v2m_sysctl: sysctl@01000 {
 				compatible = "arm,sp810", "arm,primecell";
 				reg = <0x01000 0x1000>;
+				clocks = <&v2m_refclk32khz>, <&v2m_refclk1mhz>;
+				clock-names = "refclk", "timclk";
+				#clock-cells = <1>;
+				clock-output-names = "timerclken0", "timerclken1";
 			};
 
 			v2m_serial0: uart@09000 {
 				compatible = "arm,pl011", "arm,primecell";
 				reg = <0x09000 0x1000>;
 				interrupts = <5>;
+				arm,primecell-periphid = <0x00041011>;
+				//clocks = <&v2m_oscclk2>, <&smbclk>;
+				//clock-names = "uartclk", "apb_pclk";
+				clocks = <&smbclk>;
+				clock-names = "apb_pclk";
 			};
 
 			v2m_timer01: timer@11000 {
 				compatible = "arm,sp804", "arm,primecell";
 				reg = <0x11000 0x1000>;
 				interrupts = <2>;
+				clocks = <&v2m_sysctl 0>, <&v2m_sysctl 1>;
+				clock-names = "timclken1", "timclken2";
+			};
+
+			v2m_refclk1mhz: refclk1mhz {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <1000000>;
+				clock-output-names = "v2m:refclk1mhz";
+			};
+
+			v2m_refclk32khz: refclk32khz {
+				compatible = "fixed-clock";
+				#clock-cells = <0>;
+				clock-frequency = <32768>;
+				clock-output-names = "v2m:refclk32khz";
 			};
 
 			virtio_9p@15000 {
@@ -138,6 +163,19 @@
 				reg = <0x15000 0x100>;
 				interrupts = <15>;
 			};
+		};
+	};
+	dcc {
+		compatible = "arm,vexpress,config-bus";
+		arm,vexpress,config-bridge = <&v2m_sysreg>;
+
+		smbclk: oscclk2: osc@2 {
+			/* Reference clock for the test chip internal PLLs */
+			compatible = "arm,vexpress-osc";
+			arm,vexpress-sysreg,func = <1 2>;
+			freq-range = <33000000 100000000>;
+			#clock-cells = <0>;
+			clock-output-names = "tcrefclk";
 		};
 	};
 };
