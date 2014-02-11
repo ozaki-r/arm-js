@@ -2977,6 +2977,31 @@ ARMv7_CPU.prototype.smull = function(inst, addr) {
     this.print_inst_mul(addr, inst, "smull", s, dhi, dlo, n, m);
 };
 
+ARMv7_CPU.prototype.swp = function(inst,addr){
+    this.print_inst("SWP(B?)", inst, addr);
+    var B  = (inst >> 22) & 0x1;   
+    var Rn = (inst >> 16) & 0xF;
+    var Rd = (inst >> 12) & 0xF;
+    var Rm = inst & 0xF;
+		
+    var valn = this.reg(Rn);
+    var vald = this.reg(Rd);
+    var valm = this.reg(Rm);
+		
+    address = valm;
+		
+    if(B){
+        var data = this.ld_byte(valn);
+        this.st_byte(address, bitops.get_bits(valm, 7, 0));
+        this.regs[Rd] = data;
+    } else {
+        var data = this.ld_word(valn);
+        this.st_word(address, valm);
+        this.regs[Rd] = data;
+    }
+    this.print_inst_reg(addr, inst, "swp"+B?"B":"", null, Rn, Rd, Rm, null, null, false, false); 	
+}
+
 ARMv7_CPU.prototype.strex = function(inst, addr) {
     this.print_inst("STREX", inst, addr);
     var n = (inst >>> 16) & 0xf;
@@ -4356,7 +4381,7 @@ ARMv7_CPU.prototype.decode_sync_prim = function(inst, addr) {
     if ((op & 8) === 0) {
         if ((op & 3) === 0) {
             // SWP, SWPB
-            this.abort_not_impl("SWP, SWPB", inst, addr);
+            return "swp";
         } else {
             this.abort_unknown_inst(inst, addr);
         }
