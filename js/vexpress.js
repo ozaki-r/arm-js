@@ -947,12 +947,17 @@ function MemoryController(options, memory, io) {
     this.options = options;
     this.memory = memory;
     this.io = io;
+
+    this.enable_unhandled_io_access_check = false;  // set true for debugging
 }
 
 MemoryController.prototype.ld_byte = function(addr) {
     if (this.io.read[addr] !== undefined)
         return this.io.ld_byte(addr);
-    //assert(addr < this.memory.size, "ld_byte: addr < this.memory.size: " + toStringHex32(addr));
+
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "ld_byte: addr < this.memory.size: " + toStringHex32(addr));
+
     return this.memory.mem_byte[addr];
 };
 
@@ -966,7 +971,10 @@ MemoryController.prototype.st_byte = function(addr, onebyte) {
         this.io.st_byte(addr, onebyte);
         return;
     }
-    //assert(addr < this.memory.size, "st_byte: addr < this.memory.size: " + toStringHex32(addr));
+
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "st_byte: addr < this.memory.size: " + toStringHex32(addr));
+
     this.memory.mem_byte[addr] = onebyte;
 };
 
@@ -977,7 +985,10 @@ MemoryController.prototype.st_byte_fast = function(addr, onebyte) {
 MemoryController.prototype.ld_halfword = function(addr) {
     if (this.io.read[addr] !== undefined)
         return this.io.ld_halfword(addr);
-    //assert(addr < this.memory.size, "ld_halfword: addr < this.memory.size: " + toStringHex32(addr));
+
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "ld_halfword: addr < this.memory.size: " + toStringHex32(addr));
+
     if (addr & 1)
         throw "ld_halfword: alignment error!";
     return this.memory.mem_halfword[addr >> 1];
@@ -993,7 +1004,10 @@ MemoryController.prototype.st_halfword = function(addr, halfword) {
         this.io.st_halfword(addr, halfword);
         return;
     }
-    //assert(addr < this.memory.size, "st_halfword: addr < this.memory.size" + toStringHex32(addr));
+
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "st_halfword: addr < this.memory.size" + toStringHex32(addr));
+
     if (addr & 1)
         throw "st_halfword: alignment error!";
     this.memory.mem_halfword[addr >> 1] = halfword;
@@ -1007,7 +1021,9 @@ MemoryController.prototype.ld_word = function(addr) {
     if (this.io.read[addr] !== undefined)
         return this.io.ld_word(addr);
 
-    //assert(addr < this.memory.size, "ld_word: addr < this.memory.size: " + toStringHex32(addr));
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "ld_word: addr < this.memory.size: " + toStringHex32(addr));
+
     if (addr & 3)
         throw "Unaligned ld_word: " + toStringHex32(addr);
     return this.memory.mem_word[addr >>> 2];
@@ -1024,7 +1040,9 @@ MemoryController.prototype.st_word = function(addr, word) {
         return;
     }
 
-    //assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+
     this.memory.mem_word[addr >>> 2] = word;
 };
 
@@ -1039,7 +1057,9 @@ MemoryController.prototype.st_word_unaligned = function(addr, word) {
         return;
     }
 
-    //assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+    if (this.enable_unhandled_io_access_check)
+        assert(addr < this.memory.size, "st_word: addr < this.memory.size: " + toStringHex32(addr));
+
     var align = addr & 3;
     if (align === 0) {
         this.memory.mem_word[addr >>> 2] = word;
