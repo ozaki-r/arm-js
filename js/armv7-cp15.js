@@ -27,6 +27,7 @@ function ARMv7_CP15(options, cpu) {
     this.ID_PFR0 =    [0, 0, 1, 0];
     this.ID_MMFR0 =   [0, 0, 1, 4];
     this.ID_MMFR1 =   [0, 0, 1, 5];
+    this.ID_ISAR0 =   [0, 0, 2, 0];
     this.CCSIDR =     [0, 1, 0, 0];
     this.CLIDR =      [0, 1, 0, 1];
     this.CSSELR =     [0, 2, 0, 0];
@@ -157,6 +158,9 @@ function ARMv7_CP15(options, cpu) {
     // VMSAv7 supported, with support for remapping and the access flag. ARMv7-A profile.
     id_mmfr0 = bitops.set_bits(id_mmfr0, 3, 0, 3); // VMSA support
     this.register_readonly("ID_MMFR0", id_mmfr0);
+
+    var id_isar0 = 0;
+    this.register_readonly("ID_ISAR0", id_mmfr0);
 
     var id_mmfr1 = 0;
     // For execution correctness, Branch Predictor requires no flushing at any time.
