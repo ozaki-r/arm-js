@@ -1466,9 +1466,7 @@ function VersatileExpress(configs, options) {
     this.uart0 = new UART(0, 0x10009000, this.irq_base + 5, this.gic);
     this.io.register_io("UART0", this.uart0);
     this.timer0 = new DualTimer(0x10011000, this.irq_base + 2, this.gic);
-    this.timer1 = new DualTimer(0x10012000, this.irq_base + 2, this.gic);
     this.io.register_io("DualTimer#0", this.timer0);
-    this.io.register_io("DualTimer#1", this.timer1);
     this.sysctrl = new SystemController(0x10001000);
     this.io.register_io("SystemController", this.sysctrl);
 
@@ -1597,8 +1595,6 @@ VersatileExpress.prototype.dump = function() {
     this.sysregs.dump();
     display.log("\nTimer0:");
     this.timer0.dump();
-    display.log("\nTimer1:");
-    this.timer1.dump();
     display.log("\nUART0:");
     this.uart0.dump();
     display.log("\n");
