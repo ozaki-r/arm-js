@@ -1860,6 +1860,17 @@ ARMv7_CPU.prototype.mov_imm_a2 = function(inst, addr) {
     this.print_inst_imm(addr, inst, "movw", false, d, null, imm32);
 };
 
+ARMv7_CPU.prototype.movt = function(inst, addr) {
+    this.print_inst("MOVT", inst, addr);
+    var imm4 = (inst >>> 16) & 0xf;
+    var d = (inst >>> 12) & 0xf;
+    var imm12 = inst & 0xfff;
+    var imm16 = (imm4 << 12) + imm12;
+
+    this.regs[d] = bitops.set_bits(this.reg(d), 16, 31, imm16);
+    //this.print_inst_imm(addr, inst, "movw", false, d, null, imm32);
+};
+
 ARMv7_CPU.prototype.msr_imm_sys = function(inst, addr) {
     this.print_inst("MSR (immediate) (system level)", inst, addr);
     var r = inst & (1 << 22);
@@ -5047,7 +5058,7 @@ ARMv7_CPU.prototype.decode_datamisc = function(inst, addr) {
                     break;
                 case 0x14:
                     // MOVT
-                    this.abort_not_impl("MOVT", inst, addr);
+                    return "movt";
                     break;
                 default:
                     if ((op1 >> 3) == 2 && (op1 & 1) === 0) {
