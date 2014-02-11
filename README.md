@@ -2,7 +2,7 @@ Arm-js
 ======
 
 Arm-js is an ARM emulator written in Javascript. It emulates ARMv7-A
-and some peripherals of Versatile Express. It can boot Linux 3.6.1
+and some peripherals of Versatile Express. It can boot Linux 3.10.29
 and run busybox processes.
 
 Emulator Features
@@ -17,8 +17,8 @@ Emulator Features
 Tested Browsers
 ===============
 
-* Chrome 27 beta (recommended)
-* Firefox 20
+* Chrome 33 beta (recommended)
+* Firefox 27
 
 Get Started
 ===========
