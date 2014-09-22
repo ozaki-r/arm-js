@@ -148,7 +148,6 @@ ARMv7_MMU.prototype.need_perm_check = function(table, is_supersection) {
             throw "Unknown Domain";
             break;
     }
-    throw "Unknown Domain";
 };
 
 ARMv7_MMU.prototype.walk_table = function(vaddr, is_write) {
